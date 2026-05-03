@@ -1,7 +1,14 @@
 # hospital-familia-server
 
-Repositorio backend de `Hospital - Familia`.
+Backend base de `Hospital - Familia`.
 
-Estado inicial:
-- repositorio creado,
-- pendiente de definir arquitectura y primer scaffold.
+## Stack
+- Spring Boot 3.5
+- Java 21
+- Maven Wrapper
+- PostgreSQL
+- Flyway
+
+## Estado inicial
+- scaffold backend creado,
+- listo para definir modulos, seguridad y persistencia.
