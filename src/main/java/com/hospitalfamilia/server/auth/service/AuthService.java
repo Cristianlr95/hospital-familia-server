@@ -1,0 +1,147 @@
+package com.hospitalfamilia.server.auth.service;
+
+import com.hospitalfamilia.server.auth.dto.LoginRequest;
+import com.hospitalfamilia.server.auth.dto.LoginResponse;
+import com.hospitalfamilia.server.auth.dto.RegisterRequest;
+import com.hospitalfamilia.server.auth.dto.TokenRefreshRequest;
+import com.hospitalfamilia.server.auth.dto.UserDto;
+import com.hospitalfamilia.server.auth.entity.Role;
+import com.hospitalfamilia.server.auth.entity.RoleName;
+import com.hospitalfamilia.server.auth.entity.User;
+import com.hospitalfamilia.server.auth.exception.AuthException;
+import com.hospitalfamilia.server.auth.exception.UserAlreadyExistsException;
+import com.hospitalfamilia.server.auth.repository.RoleRepository;
+import com.hospitalfamilia.server.auth.repository.UserRepository;
+import com.hospitalfamilia.server.auth.security.JwtTokenProvider;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class AuthService {
+
+    private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final AuthenticationManager authenticationManager;
+    private final JwtTokenProvider jwtTokenProvider;
+
+    public AuthService(
+        UserRepository userRepository,
+        RoleRepository roleRepository,
+        PasswordEncoder passwordEncoder,
+        AuthenticationManager authenticationManager,
+        JwtTokenProvider jwtTokenProvider
+    ) {
+        this.userRepository = userRepository;
+        this.roleRepository = roleRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.authenticationManager = authenticationManager;
+        this.jwtTokenProvider = jwtTokenProvider;
+    }
+
+    @Transactional
+    public UserDto register(RegisterRequest request) {
+        if (!request.password().equals(request.confirmPassword())) {
+            throw new AuthException("Las contrasenas no coinciden");
+        }
+
+        String normalizedEmail = normalizeEmail(request.email());
+        if (userRepository.existsByEmailIgnoreCase(normalizedEmail)) {
+            throw new UserAlreadyExistsException("Ya existe un usuario con ese email");
+        }
+
+        Role tutorRole = roleRepository.findByName(RoleName.TUTOR)
+            .orElseThrow(() -> new AuthException("Rol TUTOR no configurado"));
+
+        User user = new User(
+            normalizedEmail,
+            passwordEncoder.encode(request.password()),
+            request.firstName().trim(),
+            request.lastName().trim(),
+            request.phoneNumber()
+        );
+        user.addRole(tutorRole);
+
+        return toDto(userRepository.save(user));
+    }
+
+    @Transactional(readOnly = true)
+    public LoginResponse login(LoginRequest request) {
+        String normalizedEmail = normalizeEmail(request.email());
+        try {
+            Authentication authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(normalizedEmail, request.password())
+            );
+            User user = userRepository.findByEmailIgnoreCase(normalizedEmail)
+                .orElseThrow(() -> new AuthException("Usuario no encontrado"));
+            String accessToken = jwtTokenProvider.generateAccessToken(authentication);
+            List<String> roles = authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .toList();
+            String refreshToken = jwtTokenProvider.generateRefreshToken(normalizedEmail, roles);
+
+            return new LoginResponse("Bearer", accessToken, refreshToken, jwtTokenProvider.getAccessExpirationMs(), toDto(user));
+        } catch (BadCredentialsException ex) {
+            throw new AuthException("Credenciales invalidas");
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public LoginResponse refresh(TokenRefreshRequest request) {
+        String refreshToken = request.refreshToken();
+        if (!jwtTokenProvider.isTokenValid(refreshToken) || !"refresh".equals(jwtTokenProvider.getTokenType(refreshToken))) {
+            throw new AuthException("Token de refresco invalido o expirado");
+        }
+
+        String email = jwtTokenProvider.getSubject(refreshToken);
+        User user = userRepository.findByEmailIgnoreCase(email)
+            .orElseThrow(() -> new AuthException("Usuario no encontrado"));
+        List<String> roles = user.getRoles().stream()
+            .map(role -> "ROLE_" + role.getName().name())
+            .toList();
+        Authentication authentication = new UsernamePasswordAuthenticationToken(email, null, roles.stream()
+            .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
+            .toList());
+        String accessToken = jwtTokenProvider.generateAccessToken(authentication);
+
+        return new LoginResponse("Bearer", accessToken, refreshToken, jwtTokenProvider.getAccessExpirationMs(), toDto(user));
+    }
+
+    @Transactional(readOnly = true)
+    public UserDto currentUser(String email) {
+        return userRepository.findByEmailIgnoreCase(email)
+            .map(this::toDto)
+            .orElseThrow(() -> new AuthException("Usuario no encontrado"));
+    }
+
+    public void logout() {
+        // Stateless JWT logout: el cliente elimina los tokens. Revocacion persistida queda para gestion de sesiones.
+    }
+
+    private UserDto toDto(User user) {
+        Set<String> roles = user.getRoles().stream()
+            .map(role -> role.getName().name())
+            .collect(Collectors.toUnmodifiableSet());
+        return new UserDto(
+            user.getId(),
+            user.getEmail(),
+            user.getFirstName(),
+            user.getLastName(),
+            user.getPhoneNumber(),
+            roles
+        );
+    }
+
+    private String normalizeEmail(String email) {
+        return email.trim().toLowerCase();
+    }
+}
