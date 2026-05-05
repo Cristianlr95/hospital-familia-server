@@ -3,6 +3,7 @@ package com.hospitalfamilia.server.common.exception;
 import com.hospitalfamilia.server.auth.exception.AuthException;
 import com.hospitalfamilia.server.auth.exception.UserAlreadyExistsException;
 import com.hospitalfamilia.server.common.dto.ApiResponse;
+import com.hospitalfamilia.server.events.exception.EventException;
 import com.hospitalfamilia.server.linking.exception.LinkingException;
 import com.hospitalfamilia.server.patientstatus.exception.PatientStatusException;
 import jakarta.validation.ConstraintViolationException;
@@ -35,6 +36,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(PatientStatusException.class)
     ResponseEntity<ApiResponse<Void>> handlePatientStatusException(PatientStatusException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(EventException.class)
+    ResponseEntity<ApiResponse<Void>> handleEventException(EventException ex) {
+        return ResponseEntity.badRequest().body(ApiResponse.error(ex.getMessage(), null));
     }
 
     @ExceptionHandler(AccessDeniedException.class)
