@@ -38,3 +38,14 @@ CREATE USER hospital_familia_dev WITH PASSWORD 'hospital_familia_dev';
 CREATE DATABASE hospital_familia_dev OWNER hospital_familia_dev;
 GRANT ALL PRIVILEGES ON DATABASE hospital_familia_dev TO hospital_familia_dev;
 ```
+
+## Endpoints de estado visible del paciente
+
+Los estados de paciente solo se exponen a tutores autenticados con vinculacion `APPROVED`.
+
+```text
+GET /api/patients/my-statuses
+GET /api/patients/{patientPublicId}/status
+```
+
+La respuesta entrega solo datos operativos acotados para familia: nombre visible, estado general, servicio actual, ubicacion actual, resumen breve y fecha de actualizacion. No expone historia clinica ni codigo de vinculacion.
