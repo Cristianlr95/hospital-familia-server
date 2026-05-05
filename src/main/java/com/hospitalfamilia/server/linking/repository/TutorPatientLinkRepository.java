@@ -6,6 +6,7 @@ import com.hospitalfamilia.server.linking.entity.Patient;
 import com.hospitalfamilia.server.linking.entity.TutorPatientLink;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface TutorPatientLinkRepository extends JpaRepository<TutorPatientLink, Long> {
@@ -18,4 +19,6 @@ public interface TutorPatientLinkRepository extends JpaRepository<TutorPatientLi
     List<TutorPatientLink> findByStatusOrderByRequestedAtAsc(LinkStatus status);
 
     Optional<TutorPatientLink> findByIdAndTutor(Long id, User tutor);
+
+    Optional<TutorPatientLink> findByTutorAndPatientPublicIdAndStatus(User tutor, UUID patientPublicId, LinkStatus status);
 }

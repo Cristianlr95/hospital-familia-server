@@ -4,6 +4,7 @@ import com.hospitalfamilia.server.auth.exception.AuthException;
 import com.hospitalfamilia.server.auth.exception.UserAlreadyExistsException;
 import com.hospitalfamilia.server.common.dto.ApiResponse;
 import com.hospitalfamilia.server.linking.exception.LinkingException;
+import com.hospitalfamilia.server.patientstatus.exception.PatientStatusException;
 import jakarta.validation.ConstraintViolationException;
 import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
@@ -29,6 +30,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(LinkingException.class)
     ResponseEntity<ApiResponse<Void>> handleLinkingException(LinkingException ex) {
         return ResponseEntity.badRequest().body(ApiResponse.error(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(PatientStatusException.class)
+    ResponseEntity<ApiResponse<Void>> handlePatientStatusException(PatientStatusException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error(ex.getMessage(), null));
     }
 
     @ExceptionHandler(AccessDeniedException.class)
