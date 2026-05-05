@@ -49,3 +49,33 @@ GET /api/patients/{patientPublicId}/status
 ```
 
 La respuesta entrega solo datos operativos acotados para familia: nombre visible, estado general, servicio actual, ubicacion actual, resumen breve y fecha de actualizacion. No expone historia clinica ni codigo de vinculacion.
+
+## Endpoints de calendario y eventos
+
+Los tutores solo pueden leer eventos de pacientes con vinculacion `APPROVED`.
+
+```text
+GET /api/patients/{patientPublicId}/events
+```
+
+El personal `STAFF` o `ADMIN` puede gestionar eventos operativos visibles para familia:
+
+```text
+GET    /api/events/patient/{patientPublicId}
+POST   /api/events
+PUT    /api/events/{id}
+PUT    /api/events/{id}/status
+DELETE /api/events/{id}
+```
+
+Tipos soportados:
+
+```text
+SURGERY, EXAM, VISIT, STATE_CHANGE, DISCHARGE, OTHER
+```
+
+Estados soportados:
+
+```text
+SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED
+```
