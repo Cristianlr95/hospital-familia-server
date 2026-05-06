@@ -39,6 +39,21 @@ CREATE DATABASE hospital_familia_dev OWNER hospital_familia_dev;
 GRANT ALL PRIVILEGES ON DATABASE hospital_familia_dev TO hospital_familia_dev;
 ```
 
+## CORS local
+
+El backend permite por defecto llamadas desde Ionic y Angular locales:
+
+```text
+http://localhost:8100
+http://localhost:4200
+```
+
+Para ajustar origenes por ambiente, usa:
+
+```text
+CORS_ALLOWED_ORIGINS=https://app.hospitalfamilia.com,https://admin.hospitalfamilia.com
+```
+
 ## Endpoints de estado visible del paciente
 
 Los estados de paciente solo se exponen a tutores autenticados con vinculacion `APPROVED`.
