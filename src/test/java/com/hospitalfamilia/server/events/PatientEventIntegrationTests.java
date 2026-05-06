@@ -165,13 +165,48 @@ class PatientEventIntegrationTests {
             .andExpect(jsonPath("$.data[0].title").value("Control medico"));
     }
 
+    @Test
+    void tutorSeesOnlyUpcomingEventsInsideThirtyDayWindow() throws Exception {
+        String tutorToken = registerAndLoginTutor("event-tutor-3@example.com");
+        String staffToken = createStaffAndLogin("event-staff-4@example.com");
+        Patient patient = patientRepository.save(new Patient("HF-EVENT-4", "Paciente Evento 4"));
+
+        createEventAt(staffToken, patient, "Evento pasado", PatientEventType.OTHER, Instant.now().minus(1, ChronoUnit.DAYS));
+        createEventAt(staffToken, patient, "Evento visible", PatientEventType.EXAM, Instant.now().plus(7, ChronoUnit.DAYS));
+        createEventAt(staffToken, patient, "Evento lejano", PatientEventType.VISIT, Instant.now().plus(31, ChronoUnit.DAYS));
+
+        MvcResult requestResult = requestLink(tutorToken, "HF-EVENT-4");
+        Long linkId = objectMapper.readTree(requestResult.getResponse().getContentAsString()).at("/data/id").asLong();
+
+        mockMvc.perform(put("/api/linking/{id}/approve", linkId)
+                .with(csrf())
+                .header(HttpHeaders.AUTHORIZATION, bearer(staffToken)))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/patients/{patientPublicId}/events", patient.getPublicId())
+                .header(HttpHeaders.AUTHORIZATION, bearer(tutorToken)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data", hasSize(1)))
+            .andExpect(jsonPath("$.data[0].title").value("Evento visible"));
+    }
+
     private MvcResult createEvent(String staffToken, Patient patient, String title, PatientEventType type) throws Exception {
+        return createEventAt(staffToken, patient, title, type, Instant.now().plus(1, ChronoUnit.DAYS));
+    }
+
+    private MvcResult createEventAt(
+        String staffToken,
+        Patient patient,
+        String title,
+        PatientEventType type,
+        Instant scheduledAt
+    ) throws Exception {
         PatientEventCreateRequest request = new PatientEventCreateRequest(
             patient.getPublicId(),
             type,
             title,
             "Informacion visible para familia",
-            Instant.now().plus(1, ChronoUnit.DAYS),
+            scheduledAt,
             45,
             "Pediatria",
             "Segundo piso",
