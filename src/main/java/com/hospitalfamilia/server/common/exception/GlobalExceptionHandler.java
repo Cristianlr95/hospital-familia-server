@@ -5,6 +5,7 @@ import com.hospitalfamilia.server.auth.exception.UserAlreadyExistsException;
 import com.hospitalfamilia.server.common.dto.ApiResponse;
 import com.hospitalfamilia.server.events.exception.EventException;
 import com.hospitalfamilia.server.linking.exception.LinkingException;
+import com.hospitalfamilia.server.notifications.exception.NotificationPreferenceException;
 import com.hospitalfamilia.server.patientstatus.exception.PatientStatusException;
 import jakarta.validation.ConstraintViolationException;
 import java.util.stream.Collectors;
@@ -40,6 +41,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(EventException.class)
     ResponseEntity<ApiResponse<Void>> handleEventException(EventException ex) {
+        return ResponseEntity.badRequest().body(ApiResponse.error(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(NotificationPreferenceException.class)
+    ResponseEntity<ApiResponse<Void>> handleNotificationPreferenceException(NotificationPreferenceException ex) {
         return ResponseEntity.badRequest().body(ApiResponse.error(ex.getMessage(), null));
     }
 
