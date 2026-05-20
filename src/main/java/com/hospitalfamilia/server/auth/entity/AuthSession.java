@@ -70,6 +70,10 @@ public class AuthSession {
         return sessionId;
     }
 
+    public Long getId() {
+        return id;
+    }
+
     public User getUser() {
         return user;
     }
@@ -84,6 +88,14 @@ public class AuthSession {
 
     public Instant getRevokedAt() {
         return revokedAt;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public Instant getUpdatedAt() {
+        return updatedAt;
     }
 
     public boolean isRevoked() {
