@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hospitalfamilia.server.auth.dto.LoginRequest;
+import com.hospitalfamilia.server.auth.dto.LogoutRequest;
 import com.hospitalfamilia.server.auth.dto.RegisterRequest;
 import com.hospitalfamilia.server.auth.dto.TokenRefreshRequest;
 import com.hospitalfamilia.server.auth.repository.UserRepository;
@@ -148,9 +149,18 @@ class AuthFlowIntegrationTests {
 
         mockMvc.perform(post("/api/auth/logout")
                 .with(csrf())
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new LogoutRequest(refreshToken))))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data").value("OK"));
+
+        mockMvc.perform(post("/api/auth/refresh")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(refreshRequest)))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.success").value(false));
     }
 
     @Test
