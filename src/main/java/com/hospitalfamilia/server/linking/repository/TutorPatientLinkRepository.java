@@ -18,6 +18,8 @@ public interface TutorPatientLinkRepository extends JpaRepository<TutorPatientLi
 
     List<TutorPatientLink> findByStatusOrderByRequestedAtAsc(LinkStatus status);
 
+    List<TutorPatientLink> findByStatusNotOrderByDecidedAtDescRequestedAtDesc(LinkStatus status);
+
     Optional<TutorPatientLink> findByIdAndTutor(Long id, User tutor);
 
     Optional<TutorPatientLink> findByTutorAndPatientPublicIdAndStatus(User tutor, UUID patientPublicId, LinkStatus status);

@@ -1,10 +1,12 @@
 package com.hospitalfamilia.server.linking;
 
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -139,6 +141,56 @@ class LinkingFlowIntegrationTests {
     }
 
     @Test
+    void staffCanListHistoryForRejectedApprovedAndRevokedLinks() throws Exception {
+        String tutorToken = registerAndLoginTutor("link-tutor-6@example.com");
+        String staffToken = createStaffAndLogin("link-staff-6@example.com");
+        patientRepository.save(new Patient("HF-1006", "Paciente Administrativo 1006"));
+        patientRepository.save(new Patient("HF-1007", "Paciente Administrativo 1007"));
+
+        Long rejectedLinkId = requestLink(tutorToken, "HF-1006");
+        mockMvc.perform(put("/api/linking/{id}/reject", rejectedLinkId)
+                .with(csrf())
+                .header(HttpHeaders.AUTHORIZATION, bearer(staffToken))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new LinkDecisionRequest("Validacion rechazada"))))
+            .andExpect(status().isOk());
+
+        Long approvedLinkId = requestLink(tutorToken, "HF-1007");
+        mockMvc.perform(put("/api/linking/{id}/approve", approvedLinkId)
+                .with(csrf())
+                .header(HttpHeaders.AUTHORIZATION, bearer(staffToken)))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(delete("/api/linking/{id}", approvedLinkId)
+                .with(csrf())
+                .header(HttpHeaders.AUTHORIZATION, bearer(tutorToken))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new LinkDecisionRequest("Alta hospitalaria"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.status").value("REVOKED"));
+
+        mockMvc.perform(get("/api/linking/history")
+                .header(HttpHeaders.AUTHORIZATION, bearer(staffToken)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data[*].status", hasItem("REVOKED")))
+            .andExpect(jsonPath("$.data[*].status", hasItem("REJECTED")))
+            .andExpect(jsonPath("$.data[*].tutorEmail", hasItem("link-tutor-6@example.com")))
+            .andExpect(jsonPath("$.data[*].decidedByEmail", hasItem("link-staff-6@example.com")))
+            .andExpect(jsonPath("$.data[*].decisionReason", hasItem("Alta hospitalaria")))
+            .andExpect(jsonPath("$.data[*].decisionReason", hasItem("Validacion rechazada")));
+    }
+
+    @Test
+    void tutorCannotListHistoryQueue() throws Exception {
+        String tutorToken = registerAndLoginTutor("link-tutor-7@example.com");
+
+        mockMvc.perform(get("/api/linking/history")
+                .header(HttpHeaders.AUTHORIZATION, bearer(tutorToken)))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
     void invalidPatientCodeReturnsBadRequest() throws Exception {
         String tutorToken = registerAndLoginTutor("link-tutor-4@example.com");
 
@@ -181,6 +233,18 @@ class LinkingFlowIntegrationTests {
                 .content(objectMapper.writeValueAsString(registerRequest)))
             .andExpect(status().isCreated());
         return login(email, "password123");
+    }
+
+    private Long requestLink(String tutorToken, String patientCode) throws Exception {
+        MvcResult requestResult = mockMvc.perform(post("/api/linking/request")
+                .with(csrf())
+                .header(HttpHeaders.AUTHORIZATION, bearer(tutorToken))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new LinkRequestCreateRequest(patientCode))))
+            .andExpect(status().isCreated())
+            .andReturn();
+
+        return objectMapper.readTree(requestResult.getResponse().getContentAsString()).at("/data/id").asLong();
     }
 
     private String createStaffAndLogin(String email) throws Exception {

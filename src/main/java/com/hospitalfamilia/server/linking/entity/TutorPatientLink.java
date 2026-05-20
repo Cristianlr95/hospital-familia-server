@@ -96,12 +96,20 @@ public class TutorPatientLink {
         return decisionReason;
     }
 
+    public User getDecidedBy() {
+        return decidedBy;
+    }
+
     public Instant getRequestedAt() {
         return requestedAt;
     }
 
     public Instant getDecidedAt() {
         return decidedAt;
+    }
+
+    public Instant getUpdatedAt() {
+        return updatedAt;
     }
 
     public void approve(User staffUser) {

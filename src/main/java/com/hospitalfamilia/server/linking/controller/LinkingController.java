@@ -2,6 +2,7 @@ package com.hospitalfamilia.server.linking.controller;
 
 import com.hospitalfamilia.server.common.dto.ApiResponse;
 import com.hospitalfamilia.server.linking.dto.LinkDecisionRequest;
+import com.hospitalfamilia.server.linking.dto.LinkHistoryItemDto;
 import com.hospitalfamilia.server.linking.dto.LinkRequestCreateRequest;
 import com.hospitalfamilia.server.linking.dto.LinkRequestDto;
 import com.hospitalfamilia.server.linking.dto.LinkedPatientDto;
@@ -58,6 +59,12 @@ public class LinkingController {
     @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
     public ResponseEntity<ApiResponse<List<PendingLinkRequestDto>>> pendingRequests() {
         return ResponseEntity.ok(ApiResponse.success("Solicitudes pendientes", linkingService.pendingRequests()));
+    }
+
+    @GetMapping("/history")
+    @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
+    public ResponseEntity<ApiResponse<List<LinkHistoryItemDto>>> history() {
+        return ResponseEntity.ok(ApiResponse.success("Historial de vinculaciones", linkingService.history()));
     }
 
     @PutMapping("/{id}/approve")
