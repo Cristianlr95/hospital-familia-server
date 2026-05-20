@@ -11,4 +11,6 @@ public interface PatientCareSnapshotRepository extends JpaRepository<PatientCare
     List<PatientCareSnapshot> findByPatientIn(Collection<Patient> patients);
 
     Optional<PatientCareSnapshot> findByPatient(Patient patient);
+
+    List<PatientCareSnapshot> findTop20ByOrderByUpdatedAtDesc();
 }
