@@ -4,6 +4,7 @@ import com.hospitalfamilia.server.auth.entity.RoleName;
 import com.hospitalfamilia.server.auth.entity.User;
 import com.hospitalfamilia.server.auth.repository.UserRepository;
 import com.hospitalfamilia.server.linking.dto.LinkDecisionRequest;
+import com.hospitalfamilia.server.linking.dto.LinkHistoryItemDto;
 import com.hospitalfamilia.server.linking.dto.LinkRequestCreateRequest;
 import com.hospitalfamilia.server.linking.dto.LinkRequestDto;
 import com.hospitalfamilia.server.linking.dto.LinkedPatientDto;
@@ -69,6 +70,13 @@ public class LinkingService {
     public List<PendingLinkRequestDto> pendingRequests() {
         return linkRepository.findByStatusOrderByRequestedAtAsc(LinkStatus.PENDING).stream()
             .map(this::toPendingDto)
+            .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<LinkHistoryItemDto> history() {
+        return linkRepository.findByStatusNotOrderByDecidedAtDescRequestedAtDesc(LinkStatus.PENDING).stream()
+            .map(this::toHistoryDto)
             .toList();
     }
 
@@ -141,6 +149,27 @@ public class LinkingService {
             tutor.getFirstName() + " " + tutor.getLastName(),
             patient.getPublicId(),
             patient.getDisplayName()
+        );
+    }
+
+    private LinkHistoryItemDto toHistoryDto(TutorPatientLink link) {
+        User tutor = link.getTutor();
+        Patient patient = link.getPatient();
+        User decidedBy = link.getDecidedBy();
+        String decidedByName = decidedBy == null ? null : decidedBy.getFirstName() + " " + decidedBy.getLastName();
+
+        return new LinkHistoryItemDto(
+            link.getId(),
+            link.getStatus(),
+            link.getRequestedAt(),
+            link.getDecidedAt(),
+            link.getDecisionReason(),
+            tutor.getEmail(),
+            tutor.getFirstName() + " " + tutor.getLastName(),
+            patient.getPublicId(),
+            patient.getDisplayName(),
+            decidedBy == null ? null : decidedBy.getEmail(),
+            decidedByName
         );
     }
 
