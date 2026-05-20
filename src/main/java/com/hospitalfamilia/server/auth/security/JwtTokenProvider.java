@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.Date;
 import java.util.List;
+import java.util.UUID;
 import javax.crypto.SecretKey;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
@@ -39,8 +40,8 @@ public class JwtTokenProvider {
         return generateToken(authentication.getName(), roles, accessExpirationMs, "access");
     }
 
-    public String generateRefreshToken(String email, Collection<String> roles) {
-        return generateToken(email, roles, refreshExpirationMs, "refresh");
+    public String generateRefreshToken(String email, Collection<String> roles, UUID sessionId) {
+        return generateToken(email, roles, refreshExpirationMs, "refresh", sessionId);
     }
 
     public boolean isTokenValid(String token) {
@@ -60,6 +61,18 @@ public class JwtTokenProvider {
         return claims(token).get("type", String.class);
     }
 
+    public UUID getTokenId(String token) {
+        String tokenId = claims(token).getId();
+        if (tokenId == null || tokenId.isBlank()) {
+            throw new JwtException("Token sin identificador");
+        }
+        return UUID.fromString(tokenId);
+    }
+
+    public Instant getExpiration(String token) {
+        return claims(token).getExpiration().toInstant();
+    }
+
     @SuppressWarnings("unchecked")
     public List<String> getRoles(String token) {
         Object roles = claims(token).get("roles");
@@ -73,16 +86,21 @@ public class JwtTokenProvider {
         return accessExpirationMs;
     }
 
-    private String generateToken(String subject, Collection<String> roles, long expirationMs, String type) {
+    private String generateToken(String subject, Collection<String> roles, long expirationMs, String type, UUID tokenId) {
         Instant now = Instant.now();
         return Jwts.builder()
             .subject(subject)
+            .id(tokenId == null ? null : tokenId.toString())
             .claim("roles", roles)
             .claim("type", type)
             .issuedAt(Date.from(now))
             .expiration(Date.from(now.plusMillis(expirationMs)))
             .signWith(secretKey)
             .compact();
+    }
+
+    private String generateToken(String subject, Collection<String> roles, long expirationMs, String type) {
+        return generateToken(subject, roles, expirationMs, type, null);
     }
 
     private Claims claims(String token) {

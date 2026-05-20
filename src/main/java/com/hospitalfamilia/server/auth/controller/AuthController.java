@@ -2,6 +2,7 @@ package com.hospitalfamilia.server.auth.controller;
 
 import com.hospitalfamilia.server.auth.dto.LoginRequest;
 import com.hospitalfamilia.server.auth.dto.LoginResponse;
+import com.hospitalfamilia.server.auth.dto.LogoutRequest;
 import com.hospitalfamilia.server.auth.dto.RegisterRequest;
 import com.hospitalfamilia.server.auth.dto.TokenRefreshRequest;
 import com.hospitalfamilia.server.auth.dto.UserDto;
@@ -49,8 +50,8 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<ApiResponse<String>> logout() {
-        authService.logout();
+    public ResponseEntity<ApiResponse<String>> logout(@Valid @RequestBody LogoutRequest request) {
+        authService.logout(request);
         return ResponseEntity.ok(ApiResponse.success("Sesion cerrada correctamente", "OK"));
     }
 }

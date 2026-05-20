@@ -2,19 +2,24 @@ package com.hospitalfamilia.server.auth.service;
 
 import com.hospitalfamilia.server.auth.dto.LoginRequest;
 import com.hospitalfamilia.server.auth.dto.LoginResponse;
+import com.hospitalfamilia.server.auth.dto.LogoutRequest;
 import com.hospitalfamilia.server.auth.dto.RegisterRequest;
 import com.hospitalfamilia.server.auth.dto.TokenRefreshRequest;
 import com.hospitalfamilia.server.auth.dto.UserDto;
+import com.hospitalfamilia.server.auth.entity.AuthSession;
 import com.hospitalfamilia.server.auth.entity.Role;
 import com.hospitalfamilia.server.auth.entity.RoleName;
 import com.hospitalfamilia.server.auth.entity.User;
 import com.hospitalfamilia.server.auth.exception.AuthException;
 import com.hospitalfamilia.server.auth.exception.UserAlreadyExistsException;
+import com.hospitalfamilia.server.auth.repository.AuthSessionRepository;
 import com.hospitalfamilia.server.auth.repository.RoleRepository;
 import com.hospitalfamilia.server.auth.repository.UserRepository;
 import com.hospitalfamilia.server.auth.security.JwtTokenProvider;
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -29,6 +34,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuthService {
 
     private final UserRepository userRepository;
+    private final AuthSessionRepository authSessionRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
@@ -36,12 +42,14 @@ public class AuthService {
 
     public AuthService(
         UserRepository userRepository,
+        AuthSessionRepository authSessionRepository,
         RoleRepository roleRepository,
         PasswordEncoder passwordEncoder,
         AuthenticationManager authenticationManager,
         JwtTokenProvider jwtTokenProvider
     ) {
         this.userRepository = userRepository;
+        this.authSessionRepository = authSessionRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.authenticationManager = authenticationManager;
@@ -87,7 +95,14 @@ public class AuthService {
             List<String> roles = authentication.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .toList();
-            String refreshToken = jwtTokenProvider.generateRefreshToken(normalizedEmail, roles);
+            UUID sessionId = UUID.randomUUID();
+            String refreshToken = jwtTokenProvider.generateRefreshToken(normalizedEmail, roles, sessionId);
+            authSessionRepository.save(new AuthSession(
+                sessionId,
+                user,
+                "refresh",
+                jwtTokenProvider.getExpiration(refreshToken)
+            ));
 
             return new LoginResponse("Bearer", accessToken, refreshToken, jwtTokenProvider.getAccessExpirationMs(), toDto(user));
         } catch (BadCredentialsException ex) {
@@ -102,6 +117,7 @@ public class AuthService {
             throw new AuthException("Token de refresco invalido o expirado");
         }
 
+        AuthSession authSession = findActiveRefreshSession(refreshToken);
         String email = jwtTokenProvider.getSubject(refreshToken);
         User user = userRepository.findByEmailIgnoreCase(email)
             .orElseThrow(() -> new AuthException("Usuario no encontrado"));
@@ -112,6 +128,9 @@ public class AuthService {
             .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
             .toList());
         String accessToken = jwtTokenProvider.generateAccessToken(authentication);
+        if (!authSession.getUser().getId().equals(user.getId())) {
+            throw new AuthException("La sesion no coincide con el usuario autenticado");
+        }
 
         return new LoginResponse("Bearer", accessToken, refreshToken, jwtTokenProvider.getAccessExpirationMs(), toDto(user));
     }
@@ -123,8 +142,39 @@ public class AuthService {
             .orElseThrow(() -> new AuthException("Usuario no encontrado"));
     }
 
-    public void logout() {
-        // Stateless JWT logout: el cliente elimina los tokens. Revocacion persistida queda para gestion de sesiones.
+    @Transactional
+    public void logout(LogoutRequest request) {
+        String refreshToken = request.refreshToken();
+        if (!jwtTokenProvider.isTokenValid(refreshToken) || !"refresh".equals(jwtTokenProvider.getTokenType(refreshToken))) {
+            throw new AuthException("Token de refresco invalido o expirado");
+        }
+
+        AuthSession authSession = findSessionByToken(refreshToken);
+        if (!authSession.isRevoked()) {
+            authSession.revoke();
+            authSessionRepository.save(authSession);
+        }
+    }
+
+    private AuthSession findActiveRefreshSession(String refreshToken) {
+        AuthSession authSession = findSessionByToken(refreshToken);
+        if (authSession.isRevoked() || authSession.isExpired()) {
+            throw new AuthException("Sesion revocada o expirada");
+        }
+        return authSession;
+    }
+
+    private AuthSession findSessionByToken(String refreshToken) {
+        UUID sessionId = jwtTokenProvider.getTokenId(refreshToken);
+        AuthSession authSession = authSessionRepository.findBySessionId(sessionId)
+            .orElseThrow(() -> new AuthException("Sesion no encontrada"));
+        if (!"refresh".equals(authSession.getTokenType())) {
+            throw new AuthException("Tipo de sesion invalido");
+        }
+        if (authSession.getExpiresAt().isBefore(Instant.now())) {
+            throw new AuthException("Sesion expirada");
+        }
+        return authSession;
     }
 
     private UserDto toDto(User user) {

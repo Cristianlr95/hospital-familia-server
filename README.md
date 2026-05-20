@@ -54,6 +54,43 @@ Para ajustar origenes por ambiente, usa:
 CORS_ALLOWED_ORIGINS=https://app.hospitalfamilia.com,https://admin.hospitalfamilia.com
 ```
 
+## Variables sensibles y Swagger
+
+La configuracion base del backend ya quedo externalizada para ambientes reales.
+
+Variables principales:
+
+```text
+SPRING_DATASOURCE_URL
+SPRING_DATASOURCE_USERNAME
+SPRING_DATASOURCE_PASSWORD
+JWT_SECRET
+JWT_EXPIRATION_MS
+JWT_REFRESH_EXPIRATION_MS
+CORS_ALLOWED_ORIGINS
+APP_DOCS_ENABLED
+```
+
+Referencia rapida:
+
+```text
+.env.example
+```
+
+Swagger y OpenAPI quedan deshabilitados por defecto. Para habilitarlos localmente:
+
+```text
+APP_DOCS_ENABLED=true
+```
+
+## Sesiones
+
+El login crea una sesion persistida asociada al `refresh token`.
+
+- `POST /api/auth/refresh` valida que la sesion siga activa.
+- `POST /api/auth/logout` revoca la sesion para impedir nuevos refresh.
+- El `access token` actual sigue siendo temporal hasta expirar, pero la continuidad de sesion queda bloqueada.
+
 ## Endpoints de estado visible del paciente
 
 Los estados de paciente solo se exponen a tutores autenticados con vinculacion `APPROVED`.

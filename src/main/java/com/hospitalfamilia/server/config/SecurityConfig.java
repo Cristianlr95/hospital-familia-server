@@ -35,15 +35,18 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final ObjectMapper objectMapper;
     private final List<String> allowedOrigins;
+    private final boolean docsEnabled;
 
     public SecurityConfig(
         JwtAuthenticationFilter jwtAuthenticationFilter,
         ObjectMapper objectMapper,
-        @Value("${app.cors.allowed-origins}") List<String> allowedOrigins
+        @Value("${app.cors.allowed-origins}") List<String> allowedOrigins,
+        @Value("${app.docs.enabled:false}") boolean docsEnabled
     ) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.objectMapper = objectMapper;
         this.allowedOrigins = allowedOrigins;
+        this.docsEnabled = docsEnabled;
     }
 
     @Bean
@@ -59,16 +62,7 @@ public class SecurityConfig {
                 objectMapper.writeValue(response.getWriter(), ApiResponse.error("No autorizado", null));
             }))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers(
-                    "/api/auth/register",
-                    "/api/auth/login",
-                    "/api/auth/refresh",
-                    "/swagger-ui.html",
-                    "/swagger-ui/**",
-                    "/v3/api-docs/**",
-                    "/actuator/health",
-                    "/actuator/health/**"
-                ).permitAll()
+                .requestMatchers(publicEndpoints()).permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
@@ -113,5 +107,28 @@ public class SecurityConfig {
         FilterRegistrationBean<JwtAuthenticationFilter> registration = new FilterRegistrationBean<>(filter);
         registration.setEnabled(false);
         return registration;
+    }
+
+    private String[] publicEndpoints() {
+        if (docsEnabled) {
+            return new String[] {
+                "/api/auth/register",
+                "/api/auth/login",
+                "/api/auth/refresh",
+                "/swagger-ui.html",
+                "/swagger-ui/**",
+                "/v3/api-docs/**",
+                "/actuator/health",
+                "/actuator/health/**"
+            };
+        }
+
+        return new String[] {
+            "/api/auth/register",
+            "/api/auth/login",
+            "/api/auth/refresh",
+            "/actuator/health",
+            "/actuator/health/**"
+        };
     }
 }
