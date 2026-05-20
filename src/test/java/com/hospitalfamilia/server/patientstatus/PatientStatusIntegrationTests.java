@@ -20,6 +20,7 @@ import com.hospitalfamilia.server.linking.dto.LinkRequestCreateRequest;
 import com.hospitalfamilia.server.linking.entity.Patient;
 import com.hospitalfamilia.server.linking.repository.PatientRepository;
 import com.hospitalfamilia.server.patientstatus.entity.PatientCareSnapshot;
+import com.hospitalfamilia.server.patientstatus.dto.PatientStatusUpdateRequest;
 import com.hospitalfamilia.server.patientstatus.repository.PatientCareSnapshotRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -136,6 +137,59 @@ class PatientStatusIntegrationTests {
                 .header(HttpHeaders.AUTHORIZATION, bearer(staffToken)))
             .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    void staffCanUpdateVisiblePatientStatusForTutors() throws Exception {
+        String tutorToken = registerAndLoginTutor("status-tutor-4@example.com");
+        String staffToken = createStaffAndLogin("status-staff-4@example.com");
+        Patient patient = patientRepository.save(new Patient("HF-STATUS-4", "Paciente Estado 4"));
+
+        MvcResult requestResult = requestLink(tutorToken, "HF-STATUS-4");
+        Long linkId = objectMapper.readTree(requestResult.getResponse().getContentAsString()).at("/data/id").asLong();
+        mockMvc.perform(put("/api/linking/{id}/approve", linkId)
+                .with(csrf())
+                .header(HttpHeaders.AUTHORIZATION, bearer(staffToken)))
+            .andExpect(status().isOk());
+
+        PatientStatusUpdateRequest request = new PatientStatusUpdateRequest(
+            "Bajo vigilancia",
+            "Medicina interna",
+            "Habitacion 512",
+            "Control frecuente por equipo de enfermeria"
+        );
+
+        mockMvc.perform(put("/api/patients/{patientPublicId}/status", patient.getPublicId())
+                .with(csrf())
+                .header(HttpHeaders.AUTHORIZATION, bearer(staffToken))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.careStatus").value("Bajo vigilancia"))
+            .andExpect(jsonPath("$.data.currentService").value("Medicina interna"))
+            .andExpect(jsonPath("$.data.currentLocation").value("Habitacion 512"))
+            .andExpect(jsonPath("$.data.summary").value("Control frecuente por equipo de enfermeria"));
+
+        mockMvc.perform(get("/api/patients/{patientPublicId}/status", patient.getPublicId())
+                .header(HttpHeaders.AUTHORIZATION, bearer(tutorToken)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.careStatus").value("Bajo vigilancia"))
+            .andExpect(jsonPath("$.data.currentLocation").value("Habitacion 512"));
+    }
+
+    @Test
+    void tutorCannotUpdatePatientStatus() throws Exception {
+        String tutorToken = registerAndLoginTutor("status-tutor-5@example.com");
+        Patient patient = patientRepository.save(new Patient("HF-STATUS-5", "Paciente Estado 5"));
+
+        PatientStatusUpdateRequest request = new PatientStatusUpdateRequest("Estable", null, null, null);
+
+        mockMvc.perform(put("/api/patients/{patientPublicId}/status", patient.getPublicId())
+                .with(csrf())
+                .header(HttpHeaders.AUTHORIZATION, bearer(tutorToken))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isForbidden());
     }
 
     private MvcResult requestLink(String tutorToken, String patientCode) throws Exception {
