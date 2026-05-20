@@ -3,7 +3,9 @@ package com.hospitalfamilia.server.auth.service;
 import com.hospitalfamilia.server.auth.dto.LoginRequest;
 import com.hospitalfamilia.server.auth.dto.LoginResponse;
 import com.hospitalfamilia.server.auth.dto.LogoutRequest;
+import com.hospitalfamilia.server.auth.dto.AuthSessionDto;
 import com.hospitalfamilia.server.auth.dto.RegisterRequest;
+import com.hospitalfamilia.server.auth.dto.RevokeOtherSessionsRequest;
 import com.hospitalfamilia.server.auth.dto.TokenRefreshRequest;
 import com.hospitalfamilia.server.auth.dto.UserDto;
 import com.hospitalfamilia.server.auth.entity.AuthSession;
@@ -156,12 +158,77 @@ public class AuthService {
         }
     }
 
+    @Transactional(readOnly = true)
+    public List<AuthSessionDto> sessions(String email, String currentRefreshToken) {
+        User user = userRepository.findByEmailIgnoreCase(email)
+            .orElseThrow(() -> new AuthException("Usuario no encontrado"));
+        UUID currentSessionId = extractCurrentSessionId(currentRefreshToken);
+
+        return authSessionRepository.findByUserOrderByCreatedAtDesc(user).stream()
+            .map(session -> toSessionDto(session, currentSessionId))
+            .toList();
+    }
+
+    @Transactional
+    public void revokeSession(String email, UUID sessionId) {
+        User user = userRepository.findByEmailIgnoreCase(email)
+            .orElseThrow(() -> new AuthException("Usuario no encontrado"));
+        AuthSession authSession = authSessionRepository.findBySessionId(sessionId)
+            .orElseThrow(() -> new AuthException("Sesion no encontrada"));
+        if (!authSession.getUser().getId().equals(user.getId())) {
+            throw new AuthException("La sesion no pertenece al usuario autenticado");
+        }
+        if (!authSession.isRevoked()) {
+            authSession.revoke();
+            authSessionRepository.save(authSession);
+        }
+    }
+
+    @Transactional
+    public void revokeOtherSessions(String email, RevokeOtherSessionsRequest request) {
+        User user = userRepository.findByEmailIgnoreCase(email)
+            .orElseThrow(() -> new AuthException("Usuario no encontrado"));
+        AuthSession currentSession = findActiveRefreshSession(request.refreshToken());
+        if (!currentSession.getUser().getId().equals(user.getId())) {
+            throw new AuthException("La sesion no coincide con el usuario autenticado");
+        }
+
+        List<AuthSession> sessions = authSessionRepository.findByUserOrderByCreatedAtDesc(user);
+        sessions.stream()
+            .filter(session -> !session.getSessionId().equals(currentSession.getSessionId()))
+            .filter(session -> !session.isRevoked())
+            .forEach(AuthSession::revoke);
+        authSessionRepository.saveAll(sessions);
+    }
+
     private AuthSession findActiveRefreshSession(String refreshToken) {
         AuthSession authSession = findSessionByToken(refreshToken);
         if (authSession.isRevoked() || authSession.isExpired()) {
             throw new AuthException("Sesion revocada o expirada");
         }
         return authSession;
+    }
+
+    private UUID extractCurrentSessionId(String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank()) {
+            return null;
+        }
+        if (!jwtTokenProvider.isTokenValid(refreshToken) || !"refresh".equals(jwtTokenProvider.getTokenType(refreshToken))) {
+            return null;
+        }
+        return jwtTokenProvider.getTokenId(refreshToken);
+    }
+
+    private AuthSessionDto toSessionDto(AuthSession authSession, UUID currentSessionId) {
+        return new AuthSessionDto(
+            authSession.getSessionId(),
+            authSession.getCreatedAt(),
+            authSession.getUpdatedAt(),
+            authSession.getExpiresAt(),
+            authSession.getRevokedAt(),
+            authSession.isRevoked(),
+            currentSessionId != null && currentSessionId.equals(authSession.getSessionId())
+        );
     }
 
     private AuthSession findSessionByToken(String refreshToken) {

@@ -164,6 +164,83 @@ class AuthFlowIntegrationTests {
     }
 
     @Test
+    void sessionListingAndRevocationEndpointsWork() throws Exception {
+        RegisterRequest registerRequest = new RegisterRequest(
+            "sesiones@example.com",
+            "password123",
+            "password123",
+            "Sesion",
+            "Prueba",
+            null
+        );
+        mockMvc.perform(post("/api/auth/register")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(registerRequest)))
+            .andExpect(status().isCreated());
+
+        JsonNode firstLogin = login("sesiones@example.com", "password123");
+        JsonNode secondLogin = login("sesiones@example.com", "password123");
+
+        String firstAccessToken = firstLogin.at("/data/accessToken").asText();
+        String firstRefreshToken = firstLogin.at("/data/refreshToken").asText();
+        String secondRefreshToken = secondLogin.at("/data/refreshToken").asText();
+        String secondSessionId = jwtTokenProvider.getTokenId(secondRefreshToken).toString();
+
+        MvcResult sessionsResult = mockMvc.perform(get("/api/auth/sessions")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + firstAccessToken)
+                .header("X-Refresh-Token", firstRefreshToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.length()").value(2))
+            .andExpect(jsonPath("$.data[0].sessionId").exists())
+            .andReturn();
+
+        JsonNode sessionsJson = objectMapper.readTree(sessionsResult.getResponse().getContentAsString()).at("/data");
+        int currentCount = 0;
+        for (JsonNode session : sessionsJson) {
+            if (session.path("current").asBoolean()) {
+                currentCount++;
+            }
+        }
+        assertThat(currentCount).isEqualTo(1);
+
+        mockMvc.perform(post("/api/auth/sessions/{sessionId}/revoke", secondSessionId)
+                .with(csrf())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + firstAccessToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data").value("OK"));
+
+        mockMvc.perform(post("/api/auth/refresh")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new TokenRefreshRequest(secondRefreshToken))))
+            .andExpect(status().isUnauthorized());
+
+        JsonNode thirdLogin = login("sesiones@example.com", "password123");
+        String thirdRefreshToken = thirdLogin.at("/data/refreshToken").asText();
+
+        mockMvc.perform(post("/api/auth/sessions/revoke-others")
+                .with(csrf())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + firstAccessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new com.hospitalfamilia.server.auth.dto.RevokeOtherSessionsRequest(firstRefreshToken))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data").value("OK"));
+
+        mockMvc.perform(post("/api/auth/refresh")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new TokenRefreshRequest(firstRefreshToken))))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/auth/refresh")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new TokenRefreshRequest(thirdRefreshToken))))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void protectedEndpointReturnsUnauthorizedWithoutToken() throws Exception {
         mockMvc.perform(get("/api/auth/validate"))
             .andExpect(status().isUnauthorized())
@@ -193,5 +270,16 @@ class AuthFlowIntegrationTests {
                 .content(objectMapper.writeValueAsString(loginRequest)))
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.success").value(false));
+    }
+
+    private JsonNode login(String email, String password) throws Exception {
+        LoginRequest loginRequest = new LoginRequest(email, password);
+        MvcResult loginResult = mockMvc.perform(post("/api/auth/login")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(loginRequest)))
+            .andExpect(status().isOk())
+            .andReturn();
+        return objectMapper.readTree(loginResult.getResponse().getContentAsString());
     }
 }
