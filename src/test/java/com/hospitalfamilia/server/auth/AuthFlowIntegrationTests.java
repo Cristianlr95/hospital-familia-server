@@ -139,26 +139,38 @@ class AuthFlowIntegrationTests {
             .andExpect(jsonPath("$.data.email").value("flujo@example.com"));
 
         TokenRefreshRequest refreshRequest = new TokenRefreshRequest(refreshToken);
-        mockMvc.perform(post("/api/auth/refresh")
+        MvcResult refreshResult = mockMvc.perform(post("/api/auth/refresh")
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(refreshRequest)))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
-            .andExpect(jsonPath("$.data.refreshToken").value(refreshToken));
+            .andExpect(jsonPath("$.data.refreshToken").isNotEmpty())
+            .andReturn();
+
+        JsonNode refreshJson = objectMapper.readTree(refreshResult.getResponse().getContentAsString());
+        String rotatedRefreshToken = refreshJson.at("/data/refreshToken").asText();
+        assertThat(rotatedRefreshToken).isNotEqualTo(refreshToken);
+
+        mockMvc.perform(post("/api/auth/refresh")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(refreshRequest)))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.success").value(false));
 
         mockMvc.perform(post("/api/auth/logout")
                 .with(csrf())
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(new LogoutRequest(refreshToken))))
+                .content(objectMapper.writeValueAsString(new LogoutRequest(rotatedRefreshToken))))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data").value("OK"));
 
         mockMvc.perform(post("/api/auth/refresh")
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(refreshRequest)))
+                .content(objectMapper.writeValueAsString(new TokenRefreshRequest(rotatedRefreshToken))))
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.success").value(false));
     }

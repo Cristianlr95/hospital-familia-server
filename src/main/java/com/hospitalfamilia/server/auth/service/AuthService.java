@@ -84,7 +84,7 @@ public class AuthService {
         return toDto(userRepository.save(user));
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public LoginResponse login(LoginRequest request) {
         String normalizedEmail = normalizeEmail(request.email());
         try {
@@ -93,26 +93,16 @@ public class AuthService {
             );
             User user = userRepository.findByEmailIgnoreCase(normalizedEmail)
                 .orElseThrow(() -> new AuthException("Usuario no encontrado"));
-            String accessToken = jwtTokenProvider.generateAccessToken(authentication);
             List<String> roles = authentication.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .toList();
-            UUID sessionId = UUID.randomUUID();
-            String refreshToken = jwtTokenProvider.generateRefreshToken(normalizedEmail, roles, sessionId);
-            authSessionRepository.save(new AuthSession(
-                sessionId,
-                user,
-                "refresh",
-                jwtTokenProvider.getExpiration(refreshToken)
-            ));
-
-            return new LoginResponse("Bearer", accessToken, refreshToken, jwtTokenProvider.getAccessExpirationMs(), toDto(user));
+            return issueTokens(user, normalizedEmail, roles, authentication);
         } catch (BadCredentialsException ex) {
             throw new AuthException("Credenciales invalidas");
         }
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public LoginResponse refresh(TokenRefreshRequest request) {
         String refreshToken = request.refreshToken();
         if (!jwtTokenProvider.isTokenValid(refreshToken) || !"refresh".equals(jwtTokenProvider.getTokenType(refreshToken))) {
@@ -129,12 +119,13 @@ public class AuthService {
         Authentication authentication = new UsernamePasswordAuthenticationToken(email, null, roles.stream()
             .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
             .toList());
-        String accessToken = jwtTokenProvider.generateAccessToken(authentication);
         if (!authSession.getUser().getId().equals(user.getId())) {
             throw new AuthException("La sesion no coincide con el usuario autenticado");
         }
+        authSession.revoke();
+        authSessionRepository.save(authSession);
 
-        return new LoginResponse("Bearer", accessToken, refreshToken, jwtTokenProvider.getAccessExpirationMs(), toDto(user));
+        return issueTokens(user, email, roles, authentication);
     }
 
     @Transactional(readOnly = true)
@@ -242,6 +233,20 @@ public class AuthService {
             throw new AuthException("Sesion expirada");
         }
         return authSession;
+    }
+
+    private LoginResponse issueTokens(User user, String email, List<String> roles, Authentication authentication) {
+        String accessToken = jwtTokenProvider.generateAccessToken(authentication);
+        UUID sessionId = UUID.randomUUID();
+        String refreshToken = jwtTokenProvider.generateRefreshToken(email, roles, sessionId);
+        authSessionRepository.save(new AuthSession(
+            sessionId,
+            user,
+            "refresh",
+            jwtTokenProvider.getExpiration(refreshToken)
+        ));
+
+        return new LoginResponse("Bearer", accessToken, refreshToken, jwtTokenProvider.getAccessExpirationMs(), toDto(user));
     }
 
     private UserDto toDto(User user) {
