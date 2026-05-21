@@ -12,6 +12,8 @@ import com.hospitalfamilia.server.patientstatus.entity.PatientCareSnapshot;
 import com.hospitalfamilia.server.patientstatus.exception.PatientStatusException;
 import com.hospitalfamilia.server.patientstatus.repository.PatientCareSnapshotRepository;
 import com.hospitalfamilia.server.linking.repository.PatientRepository;
+import com.hospitalfamilia.server.notifications.entity.NotificationType;
+import com.hospitalfamilia.server.notifications.service.NotificationCenterService;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -28,17 +30,20 @@ public class PatientStatusService {
     private final TutorPatientLinkRepository linkRepository;
     private final PatientRepository patientRepository;
     private final PatientCareSnapshotRepository snapshotRepository;
+    private final NotificationCenterService notificationCenterService;
 
     public PatientStatusService(
         UserRepository userRepository,
         TutorPatientLinkRepository linkRepository,
         PatientRepository patientRepository,
-        PatientCareSnapshotRepository snapshotRepository
+        PatientCareSnapshotRepository snapshotRepository,
+        NotificationCenterService notificationCenterService
     ) {
         this.userRepository = userRepository;
         this.linkRepository = linkRepository;
         this.patientRepository = patientRepository;
         this.snapshotRepository = snapshotRepository;
+        this.notificationCenterService = notificationCenterService;
     }
 
     @Transactional(readOnly = true)
@@ -77,7 +82,14 @@ public class PatientStatusService {
             .orElseGet(() -> new PatientCareSnapshot(patient, request.careStatus().trim(), clean(request.currentService()), clean(request.currentLocation()), clean(request.summary())));
 
         snapshot.update(request.careStatus().trim(), clean(request.currentService()), clean(request.currentLocation()), clean(request.summary()));
-        return toDto(patient, snapshotRepository.save(snapshot));
+        PatientCareSnapshot savedSnapshot = snapshotRepository.save(snapshot);
+        notificationCenterService.notifyApprovedTutors(
+            patient,
+            NotificationType.STATE_CHANGE,
+            "Estado actualizado",
+            patient.getDisplayName() + ": " + savedSnapshot.getCareStatus()
+        );
+        return toDto(patient, savedSnapshot);
     }
 
     private User findUser(String email) {
