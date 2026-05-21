@@ -15,6 +15,8 @@ import com.hospitalfamilia.server.linking.entity.Patient;
 import com.hospitalfamilia.server.linking.entity.TutorPatientLink;
 import com.hospitalfamilia.server.linking.repository.PatientRepository;
 import com.hospitalfamilia.server.linking.repository.TutorPatientLinkRepository;
+import com.hospitalfamilia.server.notifications.entity.NotificationType;
+import com.hospitalfamilia.server.notifications.service.NotificationCenterService;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -32,17 +34,20 @@ public class PatientEventService {
     private final PatientRepository patientRepository;
     private final TutorPatientLinkRepository linkRepository;
     private final PatientEventRepository eventRepository;
+    private final NotificationCenterService notificationCenterService;
 
     public PatientEventService(
         UserRepository userRepository,
         PatientRepository patientRepository,
         TutorPatientLinkRepository linkRepository,
-        PatientEventRepository eventRepository
+        PatientEventRepository eventRepository,
+        NotificationCenterService notificationCenterService
     ) {
         this.userRepository = userRepository;
         this.patientRepository = patientRepository;
         this.linkRepository = linkRepository;
         this.eventRepository = eventRepository;
+        this.notificationCenterService = notificationCenterService;
     }
 
     @Transactional(readOnly = true)
@@ -73,7 +78,14 @@ public class PatientEventService {
             cleanOptional(request.responsibleStaff()),
             staff
         );
-        return toDto(eventRepository.save(event));
+        PatientEvent savedEvent = eventRepository.save(event);
+        notificationCenterService.notifyApprovedTutors(
+            patient,
+            NotificationType.NEW_EVENT,
+            "Nuevo evento programado",
+            savedEvent.getTitle() + " - " + savedEvent.getScheduledAt().truncatedTo(ChronoUnit.MINUTES)
+        );
+        return toDto(savedEvent);
     }
 
     @Transactional
@@ -89,21 +101,42 @@ public class PatientEventService {
             cleanOptional(request.location()),
             cleanOptional(request.responsibleStaff())
         );
-        return toDto(eventRepository.save(event));
+        PatientEvent savedEvent = eventRepository.save(event);
+        notificationCenterService.notifyApprovedTutors(
+            savedEvent.getPatient(),
+            NotificationType.EVENT_UPDATED,
+            "Evento actualizado",
+            savedEvent.getTitle() + " - " + savedEvent.getStatus().name()
+        );
+        return toDto(savedEvent);
     }
 
     @Transactional
     public PatientEventDto changeStatus(Long eventId, PatientEventStatusUpdateRequest request) {
         PatientEvent event = findEvent(eventId);
         event.changeStatus(request.status());
-        return toDto(eventRepository.save(event));
+        PatientEvent savedEvent = eventRepository.save(event);
+        notificationCenterService.notifyApprovedTutors(
+            savedEvent.getPatient(),
+            NotificationType.EVENT_UPDATED,
+            "Estado de evento actualizado",
+            savedEvent.getTitle() + " - " + savedEvent.getStatus().name()
+        );
+        return toDto(savedEvent);
     }
 
     @Transactional
     public PatientEventDto cancelEvent(Long eventId) {
         PatientEvent event = findEvent(eventId);
         event.changeStatus(PatientEventStatus.CANCELLED);
-        return toDto(eventRepository.save(event));
+        PatientEvent savedEvent = eventRepository.save(event);
+        notificationCenterService.notifyApprovedTutors(
+            savedEvent.getPatient(),
+            NotificationType.EVENT_UPDATED,
+            "Evento cancelado",
+            savedEvent.getTitle()
+        );
+        return toDto(savedEvent);
     }
 
     private List<PatientEvent> upcomingEvents(Patient patient) {

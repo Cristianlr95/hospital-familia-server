@@ -15,6 +15,8 @@ import com.hospitalfamilia.server.linking.entity.TutorPatientLink;
 import com.hospitalfamilia.server.linking.exception.LinkingException;
 import com.hospitalfamilia.server.linking.repository.PatientRepository;
 import com.hospitalfamilia.server.linking.repository.TutorPatientLinkRepository;
+import com.hospitalfamilia.server.notifications.entity.NotificationType;
+import com.hospitalfamilia.server.notifications.service.NotificationCenterService;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,15 +27,18 @@ public class LinkingService {
     private final UserRepository userRepository;
     private final PatientRepository patientRepository;
     private final TutorPatientLinkRepository linkRepository;
+    private final NotificationCenterService notificationCenterService;
 
     public LinkingService(
         UserRepository userRepository,
         PatientRepository patientRepository,
-        TutorPatientLinkRepository linkRepository
+        TutorPatientLinkRepository linkRepository,
+        NotificationCenterService notificationCenterService
     ) {
         this.userRepository = userRepository;
         this.patientRepository = patientRepository;
         this.linkRepository = linkRepository;
+        this.notificationCenterService = notificationCenterService;
     }
 
     @Transactional
@@ -85,7 +90,15 @@ public class LinkingService {
         User staff = findUser(staffEmail);
         TutorPatientLink link = findPendingLink(linkId);
         link.approve(staff);
-        return toPendingDto(linkRepository.save(link));
+        TutorPatientLink savedLink = linkRepository.save(link);
+        notificationCenterService.notifyTutor(
+            savedLink.getTutor(),
+            savedLink.getPatient(),
+            NotificationType.LINKING_APPROVED,
+            "Vinculacion aprobada",
+            "Ya puedes revisar el estado autorizado de " + savedLink.getPatient().getDisplayName()
+        );
+        return toPendingDto(savedLink);
     }
 
     @Transactional
@@ -93,7 +106,15 @@ public class LinkingService {
         User staff = findUser(staffEmail);
         TutorPatientLink link = findPendingLink(linkId);
         link.reject(staff, cleanReason(request.reason()));
-        return toPendingDto(linkRepository.save(link));
+        TutorPatientLink savedLink = linkRepository.save(link);
+        notificationCenterService.notifyTutor(
+            savedLink.getTutor(),
+            savedLink.getPatient(),
+            NotificationType.LINKING_REJECTED,
+            "Vinculacion rechazada",
+            savedLink.getDecisionReason() == null ? "La solicitud fue rechazada por el hospital." : savedLink.getDecisionReason()
+        );
+        return toPendingDto(savedLink);
     }
 
     @Transactional
@@ -107,7 +128,15 @@ public class LinkingService {
         }
 
         link.revoke(actor, cleanReason(request.reason()));
-        return toTutorDto(linkRepository.save(link));
+        TutorPatientLink savedLink = linkRepository.save(link);
+        notificationCenterService.notifyTutor(
+            savedLink.getTutor(),
+            savedLink.getPatient(),
+            NotificationType.LINKING_REVOKED,
+            "Vinculacion revocada",
+            savedLink.getDecisionReason() == null ? "El acceso familiar fue revocado." : savedLink.getDecisionReason()
+        );
+        return toTutorDto(savedLink);
     }
 
     private TutorPatientLink findPendingLink(Long linkId) {

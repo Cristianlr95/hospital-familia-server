@@ -5,8 +5,11 @@ import com.hospitalfamilia.server.auth.repository.UserRepository;
 import com.hospitalfamilia.server.notifications.dto.NotificationPreferenceDto;
 import com.hospitalfamilia.server.notifications.dto.NotificationPreferenceUpdateRequest;
 import com.hospitalfamilia.server.notifications.entity.NotificationPreference;
+import com.hospitalfamilia.server.notifications.entity.NotificationType;
 import com.hospitalfamilia.server.notifications.exception.NotificationPreferenceException;
 import com.hospitalfamilia.server.notifications.repository.NotificationPreferenceRepository;
+import java.time.LocalTime;
+import java.time.format.DateTimeParseException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -63,6 +66,44 @@ public class NotificationPreferenceService {
         }
         if (request.quietHoursStart() == null || request.quietHoursEnd() == null) {
             throw new NotificationPreferenceException("Debes indicar inicio y termino de horario silencioso");
+        }
+    }
+
+    @Transactional
+    public boolean allows(User user, NotificationType type) {
+        NotificationPreference preference = preferenceRepository.findByUser(user)
+            .orElseGet(() -> preferenceRepository.save(new NotificationPreference(user)));
+
+        boolean typeEnabled = switch (type) {
+            case STATE_CHANGE -> preference.isStateChangesEnabled();
+            case NEW_EVENT, EVENT_UPDATED -> preference.isEventsEnabled();
+            case LINKING_APPROVED, LINKING_REJECTED, LINKING_REVOKED -> preference.isLinkingUpdatesEnabled();
+        };
+
+        return typeEnabled && !isInsideQuietHours(preference);
+    }
+
+    private boolean isInsideQuietHours(NotificationPreference preference) {
+        if (!preference.isQuietHoursEnabled()
+            || preference.getQuietHoursStart() == null
+            || preference.getQuietHoursEnd() == null) {
+            return false;
+        }
+
+        try {
+            LocalTime now = LocalTime.now();
+            LocalTime start = LocalTime.parse(preference.getQuietHoursStart());
+            LocalTime end = LocalTime.parse(preference.getQuietHoursEnd());
+
+            if (start.equals(end)) {
+                return true;
+            }
+            if (start.isBefore(end)) {
+                return !now.isBefore(start) && now.isBefore(end);
+            }
+            return !now.isBefore(start) || now.isBefore(end);
+        } catch (DateTimeParseException exception) {
+            return false;
         }
     }
 
