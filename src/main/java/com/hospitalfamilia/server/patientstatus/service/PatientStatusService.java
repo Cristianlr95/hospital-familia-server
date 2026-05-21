@@ -7,9 +7,11 @@ import com.hospitalfamilia.server.linking.entity.Patient;
 import com.hospitalfamilia.server.linking.entity.TutorPatientLink;
 import com.hospitalfamilia.server.linking.repository.TutorPatientLinkRepository;
 import com.hospitalfamilia.server.patientstatus.dto.PatientStatusDto;
+import com.hospitalfamilia.server.patientstatus.dto.PatientStatusUpdateRequest;
 import com.hospitalfamilia.server.patientstatus.entity.PatientCareSnapshot;
 import com.hospitalfamilia.server.patientstatus.exception.PatientStatusException;
 import com.hospitalfamilia.server.patientstatus.repository.PatientCareSnapshotRepository;
+import com.hospitalfamilia.server.linking.repository.PatientRepository;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -24,15 +26,18 @@ public class PatientStatusService {
 
     private final UserRepository userRepository;
     private final TutorPatientLinkRepository linkRepository;
+    private final PatientRepository patientRepository;
     private final PatientCareSnapshotRepository snapshotRepository;
 
     public PatientStatusService(
         UserRepository userRepository,
         TutorPatientLinkRepository linkRepository,
+        PatientRepository patientRepository,
         PatientCareSnapshotRepository snapshotRepository
     ) {
         this.userRepository = userRepository;
         this.linkRepository = linkRepository;
+        this.patientRepository = patientRepository;
         this.snapshotRepository = snapshotRepository;
     }
 
@@ -64,6 +69,17 @@ public class PatientStatusService {
         return toDto(patient, snapshot);
     }
 
+    @Transactional
+    public PatientStatusDto updatePatientStatus(UUID patientPublicId, PatientStatusUpdateRequest request) {
+        Patient patient = patientRepository.findByPublicId(patientPublicId)
+            .orElseThrow(() -> new PatientStatusException("Paciente no encontrado"));
+        PatientCareSnapshot snapshot = snapshotRepository.findByPatient(patient)
+            .orElseGet(() -> new PatientCareSnapshot(patient, request.careStatus().trim(), clean(request.currentService()), clean(request.currentLocation()), clean(request.summary())));
+
+        snapshot.update(request.careStatus().trim(), clean(request.currentService()), clean(request.currentLocation()), clean(request.summary()));
+        return toDto(patient, snapshotRepository.save(snapshot));
+    }
+
     private User findUser(String email) {
         return userRepository.findByEmailIgnoreCase(email)
             .orElseThrow(() -> new PatientStatusException("Usuario no encontrado"));
@@ -91,5 +107,12 @@ public class PatientStatusService {
             snapshot.getSummary(),
             snapshot.getUpdatedAt()
         );
+    }
+
+    private String clean(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 }

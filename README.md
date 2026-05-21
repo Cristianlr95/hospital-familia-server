@@ -15,7 +15,7 @@ Backend base de `Hospital - Familia`.
 
 ## Base de datos local
 
-El perfil de desarrollo usa PostgreSQL local con estos valores por defecto:
+El perfil `dev` usa PostgreSQL local con estos valores por defecto:
 
 ```text
 Host: localhost
@@ -29,6 +29,24 @@ URL JDBC:
 
 ```text
 jdbc:postgresql://localhost:5432/hospital_familia_dev
+```
+
+Para levantar el backend apuntando explicitamente a `hospital_familia_dev`:
+
+```powershell
+.\mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=dev
+```
+
+Para confirmar la conexion, revisa que el log incluya:
+
+```text
+Database: jdbc:postgresql://localhost:5432/hospital_familia_dev
+```
+
+Y valida salud:
+
+```powershell
+Invoke-RestMethod http://localhost:8080/actuator/health
 ```
 
 Para DBeaver, crea una conexion PostgreSQL con esos mismos valores. La base y el usuario se pueden recrear desde una conexion admin con:

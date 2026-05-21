@@ -81,4 +81,11 @@ public class PatientCareSnapshot {
     public Instant getUpdatedAt() {
         return updatedAt;
     }
+
+    public void update(String careStatus, String currentService, String currentLocation, String summary) {
+        this.careStatus = careStatus;
+        this.currentService = currentService;
+        this.currentLocation = currentLocation;
+        this.summary = summary;
+    }
 }
