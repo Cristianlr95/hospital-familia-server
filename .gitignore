@@ -1,6 +1,7 @@
 HELP.md
 target/
 backend-dev.log
+logs/*.log
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
