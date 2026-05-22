@@ -27,10 +27,10 @@ import org.springframework.transaction.annotation.Transactional;
 @ConditionalOnProperty(prefix = "app.demo", name = "seed-enabled", havingValue = "true")
 public class DemoDataSeeder implements ApplicationRunner {
 
-    public static final String TUTOR_EMAIL = "tutor.demo@hospitalfamilia.local";
-    public static final String STAFF_EMAIL = "staff.demo@hospitalfamilia.local";
+    public static final String TUTOR_EMAIL = "familia.rivera@hospitalfamilia.local";
+    public static final String STAFF_EMAIL = "enfermeria.central@hospitalfamilia.local";
     public static final String DEMO_PASSWORD = "password123";
-    public static final String PATIENT_LINK_CODE = "HF-DEMO-001";
+    public static final String PATIENT_LINK_CODE = "HF-REV-001";
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
@@ -61,8 +61,8 @@ public class DemoDataSeeder implements ApplicationRunner {
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
-        User tutor = ensureUser(TUTOR_EMAIL, RoleName.TUTOR, "Tutor", "Demo", "+56911110000");
-        User staff = ensureUser(STAFF_EMAIL, RoleName.STAFF, "Staff", "Demo", "+56922220000");
+        User tutor = ensureUser(TUTOR_EMAIL, RoleName.TUTOR, "Camila", "Rivera", "+56941112233");
+        User staff = ensureUser(STAFF_EMAIL, RoleName.STAFF, "Valentina", "Rios", "+56952223344");
         Patient patient = ensurePatient();
 
         ensureApprovedLink(tutor, staff, patient);
@@ -86,7 +86,7 @@ public class DemoDataSeeder implements ApplicationRunner {
 
     private Patient ensurePatient() {
         return patientRepository.findByLinkCodeIgnoreCaseAndActiveTrue(PATIENT_LINK_CODE)
-            .orElseGet(() -> patientRepository.save(new Patient(PATIENT_LINK_CODE, "Paciente Demo Familia")));
+            .orElseGet(() -> patientRepository.save(new Patient(PATIENT_LINK_CODE, "Maria Gonzalez Rivera")));
     }
 
     private void ensureApprovedLink(User tutor, User staff, Patient patient) {
