@@ -77,4 +77,12 @@ public class Patient {
     public boolean isActive() {
         return active;
     }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public Instant getUpdatedAt() {
+        return updatedAt;
+    }
 }
