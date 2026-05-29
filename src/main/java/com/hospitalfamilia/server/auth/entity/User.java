@@ -95,6 +95,12 @@ public class User {
         this.passwordHash = passwordHash;
     }
 
+    public void updateProfile(String firstName, String lastName, String phoneNumber) {
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.phoneNumber = phoneNumber;
+    }
+
     public String getFirstName() {
         return firstName;
     }
