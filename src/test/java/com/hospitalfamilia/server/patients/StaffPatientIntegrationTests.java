@@ -3,6 +3,7 @@ package com.hospitalfamilia.server.patients;
 import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -114,6 +115,43 @@ class StaffPatientIntegrationTests {
                 .content(objectMapper.writeValueAsString(request)))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.message").value("Ya existe un paciente con este codigo de vinculacion"));
+    }
+
+    @Test
+    void staffCanDeactivatePatientAndBlockNewLinkingRequests() throws Exception {
+        String staffToken = createStaffAndLogin("patient-staff-3@example.com");
+        String tutorToken = registerAndLoginTutor("patient-tutor-3@example.com");
+        StaffPatientCreateRequest request = new StaffPatientCreateRequest("Paciente Archivado", "HF-ARCH-001");
+
+        MvcResult createResult = mockMvc.perform(post("/api/staff/patients")
+                .with(csrf())
+                .header(HttpHeaders.AUTHORIZATION, bearer(staffToken))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isCreated())
+            .andReturn();
+        String publicId = objectMapper.readTree(createResult.getResponse().getContentAsString())
+            .at("/data/publicId")
+            .asText();
+
+        mockMvc.perform(patch("/api/staff/patients/{publicId}/deactivate", publicId)
+                .with(csrf())
+                .header(HttpHeaders.AUTHORIZATION, bearer(staffToken)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.active").value(false));
+
+        mockMvc.perform(get("/api/staff/patients")
+                .header(HttpHeaders.AUTHORIZATION, bearer(staffToken)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data[*].linkCode").value(org.hamcrest.Matchers.not(hasItem("HF-ARCH-001"))));
+
+        mockMvc.perform(post("/api/linking/request")
+                .with(csrf())
+                .header(HttpHeaders.AUTHORIZATION, bearer(tutorToken))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new LinkRequestCreateRequest("HF-ARCH-001"))))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("Codigo de paciente invalido o no disponible"));
     }
 
     private String registerAndLoginTutor(String email) throws Exception {

@@ -11,6 +11,8 @@ public interface PatientRepository extends JpaRepository<Patient, Long> {
 
     Optional<Patient> findByPublicId(UUID publicId);
 
+    Optional<Patient> findByPublicIdAndActiveTrue(UUID publicId);
+
     boolean existsByLinkCodeIgnoreCase(String linkCode);
 
     List<Patient> findByActiveTrueOrderByCreatedAtDesc();

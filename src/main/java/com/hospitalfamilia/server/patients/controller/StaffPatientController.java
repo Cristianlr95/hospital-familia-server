@@ -6,10 +6,13 @@ import com.hospitalfamilia.server.patients.dto.StaffPatientDto;
 import com.hospitalfamilia.server.patients.service.StaffPatientService;
 import jakarta.validation.Valid;
 import java.util.List;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -38,6 +41,14 @@ public class StaffPatientController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(
             "Paciente creado para vinculacion familiar",
             staffPatientService.createPatient(request)
+        ));
+    }
+
+    @PatchMapping("/{publicId}/deactivate")
+    public ResponseEntity<ApiResponse<StaffPatientDto>> deactivatePatient(@PathVariable UUID publicId) {
+        return ResponseEntity.ok(ApiResponse.success(
+            "Paciente archivado y codigo de vinculacion desactivado",
+            staffPatientService.deactivatePatient(publicId)
         ));
     }
 }
