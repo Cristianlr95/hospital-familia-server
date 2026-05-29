@@ -78,6 +78,10 @@ public class Patient {
         return active;
     }
 
+    public void deactivate() {
+        this.active = false;
+    }
+
     public Instant getCreatedAt() {
         return createdAt;
     }

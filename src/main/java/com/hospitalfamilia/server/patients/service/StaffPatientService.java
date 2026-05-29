@@ -6,6 +6,7 @@ import com.hospitalfamilia.server.linking.repository.PatientRepository;
 import com.hospitalfamilia.server.patients.dto.StaffPatientCreateRequest;
 import com.hospitalfamilia.server.patients.dto.StaffPatientDto;
 import java.util.List;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +35,15 @@ public class StaffPatientService {
 
         Patient patient = patientRepository.save(new Patient(linkCode, request.displayName().trim()));
         return toDto(patient);
+    }
+
+    @Transactional
+    public StaffPatientDto deactivatePatient(UUID publicId) {
+        Patient patient = patientRepository.findByPublicIdAndActiveTrue(publicId)
+            .orElseThrow(() -> new LinkingException("Paciente activo no encontrado"));
+
+        patient.deactivate();
+        return toDto(patientRepository.save(patient));
     }
 
     private StaffPatientDto toDto(Patient patient) {
