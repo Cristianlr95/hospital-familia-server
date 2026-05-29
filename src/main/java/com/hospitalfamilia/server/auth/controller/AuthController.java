@@ -4,6 +4,9 @@ import com.hospitalfamilia.server.auth.dto.LoginRequest;
 import com.hospitalfamilia.server.auth.dto.LoginResponse;
 import com.hospitalfamilia.server.auth.dto.LogoutRequest;
 import com.hospitalfamilia.server.auth.dto.AuthSessionDto;
+import com.hospitalfamilia.server.auth.dto.PasswordResetConfirmRequest;
+import com.hospitalfamilia.server.auth.dto.PasswordResetRequest;
+import com.hospitalfamilia.server.auth.dto.PasswordResetRequestResponse;
 import com.hospitalfamilia.server.auth.dto.RegisterRequest;
 import com.hospitalfamilia.server.auth.dto.RevokeOtherSessionsRequest;
 import com.hospitalfamilia.server.auth.dto.TokenRefreshRequest;
@@ -43,6 +46,24 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<LoginResponse>> login(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(ApiResponse.success("Login exitoso", authService.login(request)));
+    }
+
+    @PostMapping("/password-reset/request")
+    public ResponseEntity<ApiResponse<PasswordResetRequestResponse>> requestPasswordReset(
+        @Valid @RequestBody PasswordResetRequest request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+            "Si el correo existe, enviaremos instrucciones de recuperacion",
+            authService.requestPasswordReset(request)
+        ));
+    }
+
+    @PostMapping("/password-reset/confirm")
+    public ResponseEntity<ApiResponse<String>> confirmPasswordReset(
+        @Valid @RequestBody PasswordResetConfirmRequest request
+    ) {
+        authService.confirmPasswordReset(request);
+        return ResponseEntity.ok(ApiResponse.success("Contrasena actualizada correctamente", "OK"));
     }
 
     @PostMapping("/refresh")

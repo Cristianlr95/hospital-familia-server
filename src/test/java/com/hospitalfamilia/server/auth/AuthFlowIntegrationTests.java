@@ -11,6 +11,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hospitalfamilia.server.auth.dto.LoginRequest;
 import com.hospitalfamilia.server.auth.dto.LogoutRequest;
+import com.hospitalfamilia.server.auth.dto.PasswordResetConfirmRequest;
+import com.hospitalfamilia.server.auth.dto.PasswordResetRequest;
 import com.hospitalfamilia.server.auth.dto.RegisterRequest;
 import com.hospitalfamilia.server.auth.dto.TokenRefreshRequest;
 import com.hospitalfamilia.server.auth.repository.UserRepository;
@@ -282,6 +284,80 @@ class AuthFlowIntegrationTests {
                 .content(objectMapper.writeValueAsString(loginRequest)))
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    void passwordResetUpdatesPasswordAndRevokesActiveSessions() throws Exception {
+        RegisterRequest registerRequest = new RegisterRequest(
+            "reset@example.com",
+            "password123",
+            "password123",
+            "Reset",
+            "Prueba",
+            null
+        );
+        mockMvc.perform(post("/api/auth/register")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(registerRequest)))
+            .andExpect(status().isCreated());
+
+        JsonNode login = login("reset@example.com", "password123");
+        String oldRefreshToken = login.at("/data/refreshToken").asText();
+
+        MvcResult resetResult = mockMvc.perform(post("/api/auth/password-reset/request")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new PasswordResetRequest("reset@example.com"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.accepted").value(true))
+            .andExpect(jsonPath("$.data.devResetToken").isNotEmpty())
+            .andReturn();
+        String resetToken = objectMapper.readTree(resetResult.getResponse().getContentAsString())
+            .at("/data/devResetToken")
+            .asText();
+
+        mockMvc.perform(post("/api/auth/password-reset/confirm")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new PasswordResetConfirmRequest(resetToken, "newpassword123", "newpassword123"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data").value("OK"));
+
+        mockMvc.perform(post("/api/auth/login")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new LoginRequest("reset@example.com", "password123"))))
+            .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(post("/api/auth/login")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new LoginRequest("reset@example.com", "newpassword123"))))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/auth/refresh")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new TokenRefreshRequest(oldRefreshToken))))
+            .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(post("/api/auth/password-reset/confirm")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new PasswordResetConfirmRequest(resetToken, "anotherpass123", "anotherpass123"))))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void passwordResetRequestDoesNotRevealUnknownEmails() throws Exception {
+        mockMvc.perform(post("/api/auth/password-reset/request")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new PasswordResetRequest("nadie@example.com"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.accepted").value(true))
+            .andExpect(jsonPath("$.data.devResetToken").doesNotExist());
     }
 
     private JsonNode login(String email, String password) throws Exception {

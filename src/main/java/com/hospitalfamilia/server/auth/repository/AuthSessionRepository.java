@@ -10,4 +10,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface AuthSessionRepository extends JpaRepository<AuthSession, Long> {
     Optional<AuthSession> findBySessionId(UUID sessionId);
     List<AuthSession> findByUserOrderByCreatedAtDesc(User user);
+    List<AuthSession> findByUserAndRevokedAtIsNull(User user);
 }
