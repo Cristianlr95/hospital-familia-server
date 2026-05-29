@@ -115,6 +115,8 @@ public class SecurityConfig {
                 "/api/auth/register",
                 "/api/auth/login",
                 "/api/auth/refresh",
+                "/api/auth/password-reset/request",
+                "/api/auth/password-reset/confirm",
                 "/swagger-ui.html",
                 "/swagger-ui/**",
                 "/v3/api-docs/**",
@@ -127,6 +129,8 @@ public class SecurityConfig {
             "/api/auth/register",
             "/api/auth/login",
             "/api/auth/refresh",
+            "/api/auth/password-reset/request",
+            "/api/auth/password-reset/confirm",
             "/actuator/health",
             "/actuator/health/**"
         };

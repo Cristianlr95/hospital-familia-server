@@ -4,25 +4,36 @@ import com.hospitalfamilia.server.auth.dto.LoginRequest;
 import com.hospitalfamilia.server.auth.dto.LoginResponse;
 import com.hospitalfamilia.server.auth.dto.LogoutRequest;
 import com.hospitalfamilia.server.auth.dto.AuthSessionDto;
+import com.hospitalfamilia.server.auth.dto.PasswordResetConfirmRequest;
+import com.hospitalfamilia.server.auth.dto.PasswordResetRequest;
+import com.hospitalfamilia.server.auth.dto.PasswordResetRequestResponse;
 import com.hospitalfamilia.server.auth.dto.RegisterRequest;
 import com.hospitalfamilia.server.auth.dto.RevokeOtherSessionsRequest;
 import com.hospitalfamilia.server.auth.dto.TokenRefreshRequest;
 import com.hospitalfamilia.server.auth.dto.UserDto;
 import com.hospitalfamilia.server.auth.entity.AuthSession;
+import com.hospitalfamilia.server.auth.entity.PasswordResetToken;
 import com.hospitalfamilia.server.auth.entity.Role;
 import com.hospitalfamilia.server.auth.entity.RoleName;
 import com.hospitalfamilia.server.auth.entity.User;
 import com.hospitalfamilia.server.auth.exception.AuthException;
 import com.hospitalfamilia.server.auth.exception.UserAlreadyExistsException;
 import com.hospitalfamilia.server.auth.repository.AuthSessionRepository;
+import com.hospitalfamilia.server.auth.repository.PasswordResetTokenRepository;
 import com.hospitalfamilia.server.auth.repository.RoleRepository;
 import com.hospitalfamilia.server.auth.repository.UserRepository;
 import com.hospitalfamilia.server.auth.security.JwtTokenProvider;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -37,25 +48,35 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final AuthSessionRepository authSessionRepository;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider jwtTokenProvider;
+    private final boolean exposePasswordResetToken;
+    private final long passwordResetExpirationMinutes;
+    private final SecureRandom secureRandom = new SecureRandom();
 
     public AuthService(
         UserRepository userRepository,
         AuthSessionRepository authSessionRepository,
+        PasswordResetTokenRepository passwordResetTokenRepository,
         RoleRepository roleRepository,
         PasswordEncoder passwordEncoder,
         AuthenticationManager authenticationManager,
-        JwtTokenProvider jwtTokenProvider
+        JwtTokenProvider jwtTokenProvider,
+        @Value("${app.password-reset.expose-token:false}") boolean exposePasswordResetToken,
+        @Value("${app.password-reset.expiration-minutes:30}") long passwordResetExpirationMinutes
     ) {
         this.userRepository = userRepository;
         this.authSessionRepository = authSessionRepository;
+        this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.authenticationManager = authenticationManager;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.exposePasswordResetToken = exposePasswordResetToken;
+        this.passwordResetExpirationMinutes = passwordResetExpirationMinutes;
     }
 
     @Transactional
@@ -100,6 +121,43 @@ public class AuthService {
         } catch (BadCredentialsException ex) {
             throw new AuthException("Credenciales invalidas");
         }
+    }
+
+    @Transactional
+    public PasswordResetRequestResponse requestPasswordReset(PasswordResetRequest request) {
+        String normalizedEmail = normalizeEmail(request.email());
+        return userRepository.findByEmailIgnoreCase(normalizedEmail)
+            .map(user -> {
+                String rawToken = generateResetToken();
+                PasswordResetToken resetToken = new PasswordResetToken(
+                    hashToken(rawToken),
+                    user,
+                    Instant.now().plusSeconds(passwordResetExpirationMinutes * 60)
+                );
+                passwordResetTokenRepository.save(resetToken);
+                return new PasswordResetRequestResponse(true, exposePasswordResetToken ? rawToken : null);
+            })
+            .orElseGet(() -> new PasswordResetRequestResponse(true, null));
+    }
+
+    @Transactional
+    public void confirmPasswordReset(PasswordResetConfirmRequest request) {
+        if (!request.password().equals(request.confirmPassword())) {
+            throw new AuthException("Las contrasenas no coinciden");
+        }
+
+        PasswordResetToken resetToken = passwordResetTokenRepository.findByTokenHash(hashToken(request.token()))
+            .orElseThrow(() -> new AuthException("Token de recuperacion invalido o expirado"));
+        if (resetToken.isUsed() || resetToken.isExpired()) {
+            throw new AuthException("Token de recuperacion invalido o expirado");
+        }
+
+        User user = resetToken.getUser();
+        user.changePassword(passwordEncoder.encode(request.password()));
+        userRepository.save(user);
+        resetToken.markUsed();
+        passwordResetTokenRepository.save(resetToken);
+        revokeActiveSessions(user);
     }
 
     @Transactional
@@ -192,6 +250,14 @@ public class AuthService {
         authSessionRepository.saveAll(sessions);
     }
 
+    private void revokeActiveSessions(User user) {
+        List<AuthSession> sessions = authSessionRepository.findByUserAndRevokedAtIsNull(user);
+        sessions.stream()
+            .filter(session -> !session.isExpired())
+            .forEach(AuthSession::revoke);
+        authSessionRepository.saveAll(sessions);
+    }
+
     private AuthSession findActiveRefreshSession(String refreshToken) {
         AuthSession authSession = findSessionByToken(refreshToken);
         if (authSession.isRevoked() || authSession.isExpired()) {
@@ -265,5 +331,21 @@ public class AuthService {
 
     private String normalizeEmail(String email) {
         return email.trim().toLowerCase();
+    }
+
+    private String generateResetToken() {
+        byte[] bytes = new byte[32];
+        secureRandom.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private String hashToken(String token) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(token.trim().getBytes(StandardCharsets.UTF_8));
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(hash);
+        } catch (NoSuchAlgorithmException ex) {
+            throw new AuthException("No pudimos procesar el token de recuperacion");
+        }
     }
 }

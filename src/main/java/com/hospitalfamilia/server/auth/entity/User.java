@@ -91,6 +91,10 @@ public class User {
         return passwordHash;
     }
 
+    public void changePassword(String passwordHash) {
+        this.passwordHash = passwordHash;
+    }
+
     public String getFirstName() {
         return firstName;
     }
