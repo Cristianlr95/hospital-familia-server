@@ -11,6 +11,7 @@ import com.hospitalfamilia.server.auth.dto.RegisterRequest;
 import com.hospitalfamilia.server.auth.dto.RevokeOtherSessionsRequest;
 import com.hospitalfamilia.server.auth.dto.TokenRefreshRequest;
 import com.hospitalfamilia.server.auth.dto.UserDto;
+import com.hospitalfamilia.server.auth.dto.UserProfileUpdateRequest;
 import com.hospitalfamilia.server.auth.entity.AuthSession;
 import com.hospitalfamilia.server.auth.entity.PasswordResetToken;
 import com.hospitalfamilia.server.auth.entity.Role;
@@ -194,6 +195,18 @@ public class AuthService {
     }
 
     @Transactional
+    public UserDto updateProfile(String email, UserProfileUpdateRequest request) {
+        User user = userRepository.findByEmailIgnoreCase(email)
+            .orElseThrow(() -> new AuthException("Usuario no encontrado"));
+        user.updateProfile(
+            request.firstName().trim(),
+            request.lastName().trim(),
+            cleanOptional(request.phoneNumber())
+        );
+        return toDto(userRepository.save(user));
+    }
+
+    @Transactional
     public void logout(LogoutRequest request) {
         String refreshToken = request.refreshToken();
         if (!jwtTokenProvider.isTokenValid(refreshToken) || !"refresh".equals(jwtTokenProvider.getTokenType(refreshToken))) {
@@ -331,6 +344,13 @@ public class AuthService {
 
     private String normalizeEmail(String email) {
         return email.trim().toLowerCase();
+    }
+
+    private String cleanOptional(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 
     private String generateResetToken() {

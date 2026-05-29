@@ -15,6 +15,7 @@ import com.hospitalfamilia.server.auth.dto.PasswordResetConfirmRequest;
 import com.hospitalfamilia.server.auth.dto.PasswordResetRequest;
 import com.hospitalfamilia.server.auth.dto.RegisterRequest;
 import com.hospitalfamilia.server.auth.dto.TokenRefreshRequest;
+import com.hospitalfamilia.server.auth.dto.UserProfileUpdateRequest;
 import com.hospitalfamilia.server.auth.repository.UserRepository;
 import com.hospitalfamilia.server.auth.security.JwtTokenProvider;
 import org.junit.jupiter.api.Test;
@@ -358,6 +359,43 @@ class AuthFlowIntegrationTests {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.accepted").value(true))
             .andExpect(jsonPath("$.data.devResetToken").doesNotExist());
+    }
+
+    @Test
+    void authenticatedUserCanUpdateOwnProfile() throws Exception {
+        RegisterRequest registerRequest = new RegisterRequest(
+            "perfil@example.com",
+            "password123",
+            "password123",
+            "Nombre",
+            "Original",
+            "+56911111111"
+        );
+        mockMvc.perform(post("/api/auth/register")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(registerRequest)))
+            .andExpect(status().isCreated());
+
+        JsonNode login = login("perfil@example.com", "password123");
+        String accessToken = login.at("/data/accessToken").asText();
+        UserProfileUpdateRequest request = new UserProfileUpdateRequest("Camila", "Rivera", "  +56922222222  ");
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/auth/profile")
+                .with(csrf())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.email").value("perfil@example.com"))
+            .andExpect(jsonPath("$.data.firstName").value("Camila"))
+            .andExpect(jsonPath("$.data.lastName").value("Rivera"))
+            .andExpect(jsonPath("$.data.phoneNumber").value("+56922222222"));
+
+        var savedUser = userRepository.findByEmailIgnoreCase("perfil@example.com").orElseThrow();
+        assertThat(savedUser.getFirstName()).isEqualTo("Camila");
+        assertThat(savedUser.getLastName()).isEqualTo("Rivera");
+        assertThat(savedUser.getPhoneNumber()).isEqualTo("+56922222222");
     }
 
     private JsonNode login(String email, String password) throws Exception {
