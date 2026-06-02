@@ -12,5 +12,7 @@ public interface PatientEventRepository extends JpaRepository<PatientEvent, Long
 
     List<PatientEvent> findByPatientInOrderByUpdatedAtDesc(Collection<Patient> patients);
 
+    long countByScheduledAtGreaterThanEqual(Instant from);
+
     List<PatientEvent> findTop20ByOrderByUpdatedAtDesc();
 }
