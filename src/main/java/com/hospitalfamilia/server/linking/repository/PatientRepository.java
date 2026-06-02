@@ -15,5 +15,7 @@ public interface PatientRepository extends JpaRepository<Patient, Long> {
 
     boolean existsByLinkCodeIgnoreCase(String linkCode);
 
+    long countByActiveTrue();
+
     List<Patient> findByActiveTrueOrderByCreatedAtDesc();
 }
