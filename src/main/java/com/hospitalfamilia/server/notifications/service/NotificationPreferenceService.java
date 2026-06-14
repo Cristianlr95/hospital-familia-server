@@ -77,7 +77,8 @@ public class NotificationPreferenceService {
         boolean typeEnabled = switch (type) {
             case STATE_CHANGE -> preference.isStateChangesEnabled();
             case NEW_EVENT, EVENT_UPDATED -> preference.isEventsEnabled();
-            case LINKING_APPROVED, LINKING_REJECTED, LINKING_REVOKED -> preference.isLinkingUpdatesEnabled();
+            case LINKING_APPROVED, LINKING_REJECTED, LINKING_REVOKED, CONTACT_REQUEST_RESOLVED ->
+                preference.isLinkingUpdatesEnabled();
         };
 
         return typeEnabled && !isInsideQuietHours(preference);

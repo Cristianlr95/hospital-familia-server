@@ -3,6 +3,7 @@ package com.hospitalfamilia.server.common.exception;
 import com.hospitalfamilia.server.auth.exception.AuthException;
 import com.hospitalfamilia.server.auth.exception.UserAlreadyExistsException;
 import com.hospitalfamilia.server.common.dto.ApiResponse;
+import com.hospitalfamilia.server.contact.exception.ContactRequestException;
 import com.hospitalfamilia.server.events.exception.EventException;
 import com.hospitalfamilia.server.linking.exception.LinkingException;
 import com.hospitalfamilia.server.notifications.exception.NotificationPreferenceException;
@@ -46,6 +47,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(NotificationPreferenceException.class)
     ResponseEntity<ApiResponse<Void>> handleNotificationPreferenceException(NotificationPreferenceException ex) {
+        return ResponseEntity.badRequest().body(ApiResponse.error(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(ContactRequestException.class)
+    ResponseEntity<ApiResponse<Void>> handleContactRequestException(ContactRequestException ex) {
         return ResponseEntity.badRequest().body(ApiResponse.error(ex.getMessage(), null));
     }
 
