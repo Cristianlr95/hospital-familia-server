@@ -64,9 +64,10 @@ $env:SPRING_MAIL_USERNAME='usuario-smtp'
 $env:SPRING_MAIL_PASSWORD='password-smtp'
 $env:SPRING_MAIL_SMTP_AUTH='true'
 $env:SPRING_MAIL_SMTP_STARTTLS_ENABLE='true'
+$env:MANAGEMENT_HEALTH_MAIL_ENABLED='true'
 ```
 
-En `dev`, `APP_PASSWORD_RESET_EXPOSE_TOKEN=true` permite revisar el flujo sin proveedor externo.
+En `dev`, `APP_PASSWORD_RESET_EXPOSE_TOKEN=true` permite revisar el flujo sin proveedor externo. El indicador de salud SMTP queda apagado por defecto para que `/actuator/health` valide backend y base de datos sin exigir un servidor de correo local. Activa `MANAGEMENT_HEALTH_MAIL_ENABLED=true` solo cuando exista un SMTP real o un MailHog local disponible.
 
 Para DBeaver, crea una conexion PostgreSQL con esos mismos valores. La base y el usuario se pueden recrear desde una conexion admin con:
 
@@ -106,6 +107,7 @@ JWT_EXPIRATION_MS
 JWT_REFRESH_EXPIRATION_MS
 CORS_ALLOWED_ORIGINS
 APP_DOCS_ENABLED
+MANAGEMENT_HEALTH_MAIL_ENABLED
 ```
 
 Referencia rapida:
