@@ -1,6 +1,7 @@
 package com.hospitalfamilia.server.common.exception;
 
 import com.hospitalfamilia.server.auth.exception.AuthException;
+import com.hospitalfamilia.server.beta.exception.BetaExitChecklistException;
 import com.hospitalfamilia.server.auth.exception.UserAlreadyExistsException;
 import com.hospitalfamilia.server.common.dto.ApiResponse;
 import com.hospitalfamilia.server.contact.exception.ContactRequestException;
@@ -52,6 +53,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ContactRequestException.class)
     ResponseEntity<ApiResponse<Void>> handleContactRequestException(ContactRequestException ex) {
+        return ResponseEntity.badRequest().body(ApiResponse.error(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(BetaExitChecklistException.class)
+    ResponseEntity<ApiResponse<Void>> handleBetaExitChecklistException(BetaExitChecklistException ex) {
         return ResponseEntity.badRequest().body(ApiResponse.error(ex.getMessage(), null));
     }
 
