@@ -54,6 +54,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider jwtTokenProvider;
+    private final PasswordResetDeliveryService passwordResetDeliveryService;
     private final boolean exposePasswordResetToken;
     private final long passwordResetExpirationMinutes;
     private final SecureRandom secureRandom = new SecureRandom();
@@ -66,6 +67,7 @@ public class AuthService {
         PasswordEncoder passwordEncoder,
         AuthenticationManager authenticationManager,
         JwtTokenProvider jwtTokenProvider,
+        PasswordResetDeliveryService passwordResetDeliveryService,
         @Value("${app.password-reset.expose-token:false}") boolean exposePasswordResetToken,
         @Value("${app.password-reset.expiration-minutes:30}") long passwordResetExpirationMinutes
     ) {
@@ -76,6 +78,7 @@ public class AuthService {
         this.passwordEncoder = passwordEncoder;
         this.authenticationManager = authenticationManager;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.passwordResetDeliveryService = passwordResetDeliveryService;
         this.exposePasswordResetToken = exposePasswordResetToken;
         this.passwordResetExpirationMinutes = passwordResetExpirationMinutes;
     }
@@ -136,6 +139,7 @@ public class AuthService {
                     Instant.now().plusSeconds(passwordResetExpirationMinutes * 60)
                 );
                 passwordResetTokenRepository.save(resetToken);
+                passwordResetDeliveryService.sendResetToken(user, rawToken, passwordResetExpirationMinutes);
                 return new PasswordResetRequestResponse(true, exposePasswordResetToken ? rawToken : null);
             })
             .orElseGet(() -> new PasswordResetRequestResponse(true, null));

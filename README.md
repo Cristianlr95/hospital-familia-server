@@ -49,6 +49,25 @@ Y valida salud:
 Invoke-RestMethod http://localhost:8080/actuator/health
 ```
 
+## Recuperacion de contrasena por email
+
+El envio SMTP esta apagado por defecto para desarrollo local. Para activarlo:
+
+```powershell
+$env:APP_PASSWORD_RESET_DELIVERY_ENABLED='true'
+$env:APP_PASSWORD_RESET_EXPOSE_TOKEN='false'
+$env:APP_PASSWORD_RESET_FROM='no-reply@tu-dominio.cl'
+$env:APP_PASSWORD_RESET_URL='https://tu-frontend/auth/reset-password'
+$env:SPRING_MAIL_HOST='smtp.tu-proveedor.cl'
+$env:SPRING_MAIL_PORT='587'
+$env:SPRING_MAIL_USERNAME='usuario-smtp'
+$env:SPRING_MAIL_PASSWORD='password-smtp'
+$env:SPRING_MAIL_SMTP_AUTH='true'
+$env:SPRING_MAIL_SMTP_STARTTLS_ENABLE='true'
+```
+
+En `dev`, `APP_PASSWORD_RESET_EXPOSE_TOKEN=true` permite revisar el flujo sin proveedor externo.
+
 Para DBeaver, crea una conexion PostgreSQL con esos mismos valores. La base y el usuario se pueden recrear desde una conexion admin con:
 
 ```sql
