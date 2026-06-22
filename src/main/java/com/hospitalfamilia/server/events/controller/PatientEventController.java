@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -36,18 +37,27 @@ public class PatientEventController {
     @PreAuthorize("hasRole('TUTOR')")
     public ResponseEntity<ApiResponse<List<PatientEventDto>>> upcomingEventsForTutor(
         Principal principal,
-        @PathVariable UUID patientPublicId
+        @PathVariable UUID patientPublicId,
+        @RequestParam(required = false) String from,
+        @RequestParam(required = false) String to
     ) {
         return ResponseEntity.ok(ApiResponse.success(
             "Eventos visibles del paciente",
-            eventService.upcomingEventsForTutor(principal.getName(), patientPublicId)
+            eventService.eventsForTutor(principal.getName(), patientPublicId, from, to)
         ));
     }
 
     @GetMapping("/events/patient/{patientPublicId}")
     @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
-    public ResponseEntity<ApiResponse<List<PatientEventDto>>> eventsForStaff(@PathVariable UUID patientPublicId) {
-        return ResponseEntity.ok(ApiResponse.success("Eventos del paciente", eventService.eventsForStaff(patientPublicId)));
+    public ResponseEntity<ApiResponse<List<PatientEventDto>>> eventsForStaff(
+        @PathVariable UUID patientPublicId,
+        @RequestParam(required = false) String from,
+        @RequestParam(required = false) String to
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+            "Eventos del paciente",
+            eventService.eventsForStaff(patientPublicId, from, to)
+        ));
     }
 
     @PostMapping("/events")

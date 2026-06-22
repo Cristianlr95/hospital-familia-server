@@ -28,8 +28,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class PatientEventService {
 
-    private static final int DEFAULT_UPCOMING_DAYS = 30;
-
     private final UserRepository userRepository;
     private final PatientRepository patientRepository;
     private final TutorPatientLinkRepository linkRepository;
@@ -52,14 +50,33 @@ public class PatientEventService {
 
     @Transactional(readOnly = true)
     public List<PatientEventDto> upcomingEventsForTutor(String tutorEmail, UUID patientPublicId) {
+        return eventsForTutor(tutorEmail, patientPublicId, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<PatientEventDto> eventsForTutor(
+        String tutorEmail,
+        UUID patientPublicId,
+        String from,
+        String to
+    ) {
         Patient patient = findApprovedPatientForTutor(tutorEmail, patientPublicId);
-        return upcomingEvents(patient).stream().map(this::toDto).toList();
+        return events(patient, EventQueryRange.resolve(from, to)).stream()
+            .map(this::toDto)
+            .toList();
     }
 
     @Transactional(readOnly = true)
     public List<PatientEventDto> eventsForStaff(UUID patientPublicId) {
+        return eventsForStaff(patientPublicId, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<PatientEventDto> eventsForStaff(UUID patientPublicId, String from, String to) {
         Patient patient = findActivePatient(patientPublicId);
-        return upcomingEvents(patient).stream().map(this::toDto).toList();
+        return events(patient, EventQueryRange.resolve(from, to)).stream()
+            .map(this::toDto)
+            .toList();
     }
 
     @Transactional
@@ -139,10 +156,20 @@ public class PatientEventService {
         return toDto(savedEvent);
     }
 
-    private List<PatientEvent> upcomingEvents(Patient patient) {
-        Instant from = Instant.now();
-        Instant to = from.plus(DEFAULT_UPCOMING_DAYS, ChronoUnit.DAYS);
-        return eventRepository.findByPatientAndScheduledAtBetweenOrderByScheduledAtAsc(patient, from, to);
+    private List<PatientEvent> events(Patient patient, EventQueryRange range) {
+        if (range.explicit()) {
+            return eventRepository.findByPatientAndScheduledAtBetweenOrderByScheduledAtAscIdAsc(
+                patient,
+                range.from(),
+                range.to()
+            );
+        }
+        return eventRepository.findByPatientAndStatusNotAndScheduledAtBetweenOrderByScheduledAtAscIdAsc(
+            patient,
+            PatientEventStatus.CANCELLED,
+            range.from(),
+            range.to()
+        );
     }
 
     private Patient findApprovedPatientForTutor(String tutorEmail, UUID patientPublicId) {

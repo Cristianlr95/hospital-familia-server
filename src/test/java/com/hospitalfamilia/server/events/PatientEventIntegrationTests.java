@@ -1,5 +1,6 @@
 package com.hospitalfamilia.server.events;
 
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -173,7 +174,16 @@ class PatientEventIntegrationTests {
 
         createEventAt(staffToken, patient, "Evento pasado", PatientEventType.OTHER, Instant.now().minus(1, ChronoUnit.DAYS));
         createEventAt(staffToken, patient, "Evento visible", PatientEventType.EXAM, Instant.now().plus(7, ChronoUnit.DAYS));
+        MvcResult cancelledResult = createEventAt(
+            staffToken,
+            patient,
+            "Evento cancelado",
+            PatientEventType.VISIT,
+            Instant.now().plus(8, ChronoUnit.DAYS)
+        );
         createEventAt(staffToken, patient, "Evento lejano", PatientEventType.VISIT, Instant.now().plus(31, ChronoUnit.DAYS));
+        Long cancelledId = objectMapper.readTree(cancelledResult.getResponse().getContentAsString()).at("/data/id").asLong();
+        cancelEvent(staffToken, cancelledId);
 
         MvcResult requestResult = requestLink(tutorToken, "HF-EVENT-4");
         Long linkId = objectMapper.readTree(requestResult.getResponse().getContentAsString()).at("/data/id").asLong();
@@ -188,6 +198,113 @@ class PatientEventIntegrationTests {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data", hasSize(1)))
             .andExpect(jsonPath("$.data[0].title").value("Evento visible"));
+    }
+
+    @Test
+    void tutorCanQueryExplicitHistoryIncludingCancelledEvents() throws Exception {
+        String tutorToken = registerAndLoginTutor("event-tutor-4@example.com");
+        String staffToken = createStaffAndLogin("event-staff-5@example.com");
+        Patient patient = patientRepository.save(new Patient("HF-EVENT-5", "Paciente Evento 5"));
+        Instant reference = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+
+        createEventAt(staffToken, patient, "Evento historico", PatientEventType.EXAM, reference.minus(5, ChronoUnit.DAYS));
+        MvcResult cancelledResult = createEventAt(
+            staffToken,
+            patient,
+            "Evento historico cancelado",
+            PatientEventType.VISIT,
+            reference.minus(3, ChronoUnit.DAYS)
+        );
+        Long cancelledId = objectMapper.readTree(cancelledResult.getResponse().getContentAsString()).at("/data/id").asLong();
+        cancelEvent(staffToken, cancelledId);
+        approveLink(tutorToken, staffToken, "HF-EVENT-5");
+
+        mockMvc.perform(get("/api/patients/{patientPublicId}/events", patient.getPublicId())
+                .param("from", reference.minus(10, ChronoUnit.DAYS).toString())
+                .param("to", reference.plus(1, ChronoUnit.DAYS).toString())
+                .header(HttpHeaders.AUTHORIZATION, bearer(tutorToken)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data", hasSize(2)))
+            .andExpect(jsonPath("$.data[*].title", contains("Evento historico", "Evento historico cancelado")))
+            .andExpect(jsonPath("$.data[1].status").value("CANCELLED"));
+    }
+
+    @Test
+    void staffRangeIsInclusiveOfHistoryAndOrderedByDateThenId() throws Exception {
+        String staffToken = createStaffAndLogin("event-staff-6@example.com");
+        Patient patient = patientRepository.save(new Patient("HF-EVENT-6", "Paciente Evento 6"));
+        Instant reference = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+        Instant sharedDate = reference.minus(2, ChronoUnit.DAYS);
+
+        createEventAt(staffToken, patient, "Primero misma fecha", PatientEventType.OTHER, sharedDate);
+        MvcResult secondResult = createEventAt(staffToken, patient, "Segundo misma fecha", PatientEventType.EXAM, sharedDate);
+        Long secondId = objectMapper.readTree(secondResult.getResponse().getContentAsString()).at("/data/id").asLong();
+        cancelEvent(staffToken, secondId);
+        createEventAt(staffToken, patient, "Ultimo por fecha", PatientEventType.VISIT, reference.minus(1, ChronoUnit.DAYS));
+        createEventAt(staffToken, patient, "Fuera del rango", PatientEventType.VISIT, reference.plus(10, ChronoUnit.DAYS));
+
+        mockMvc.perform(get("/api/events/patient/{patientPublicId}", patient.getPublicId())
+                .param("from", reference.minus(3, ChronoUnit.DAYS).toString())
+                .param("to", reference.plus(1, ChronoUnit.DAYS).toString())
+                .header(HttpHeaders.AUTHORIZATION, bearer(staffToken)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data", hasSize(3)))
+            .andExpect(jsonPath(
+                "$.data[*].title",
+                contains("Primero misma fecha", "Segundo misma fecha", "Ultimo por fecha")
+            ))
+            .andExpect(jsonPath("$.data[1].status").value("CANCELLED"));
+    }
+
+    @Test
+    void rejectsIncompleteMalformedReversedAndExcessiveRanges() throws Exception {
+        String staffToken = createStaffAndLogin("event-staff-7@example.com");
+        Patient patient = patientRepository.save(new Patient("HF-EVENT-7", "Paciente Evento 7"));
+
+        mockMvc.perform(get("/api/events/patient/{patientPublicId}", patient.getPublicId())
+                .param("from", "2026-06-01T00:00:00Z")
+                .header(HttpHeaders.AUTHORIZATION, bearer(staffToken)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("Los parametros from y to deben enviarse juntos"));
+
+        mockMvc.perform(get("/api/events/patient/{patientPublicId}", patient.getPublicId())
+                .param("from", "fecha-invalida")
+                .param("to", "2026-06-02T00:00:00Z")
+                .header(HttpHeaders.AUTHORIZATION, bearer(staffToken)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("El parametro from debe usar formato ISO-8601"));
+
+        mockMvc.perform(get("/api/events/patient/{patientPublicId}", patient.getPublicId())
+                .param("from", "2026-06-02T00:00:00Z")
+                .param("to", "2026-06-01T00:00:00Z")
+                .header(HttpHeaders.AUTHORIZATION, bearer(staffToken)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("El parametro from debe ser anterior a to"));
+
+        mockMvc.perform(get("/api/events/patient/{patientPublicId}", patient.getPublicId())
+                .param("from", "2025-06-01T00:00:00Z")
+                .param("to", "2026-06-03T00:00:00Z")
+                .header(HttpHeaders.AUTHORIZATION, bearer(staffToken)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("El rango de eventos no puede superar 366 dias"));
+    }
+
+    @Test
+    void eventListingsEnforceAuthenticationAndRoleAuthorization() throws Exception {
+        String tutorToken = registerAndLoginTutor("event-tutor-5@example.com");
+        String staffToken = createStaffAndLogin("event-staff-8@example.com");
+        Patient patient = patientRepository.save(new Patient("HF-EVENT-8", "Paciente Evento 8"));
+
+        mockMvc.perform(get("/api/patients/{patientPublicId}/events", patient.getPublicId()))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/events/patient/{patientPublicId}", patient.getPublicId()))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/events/patient/{patientPublicId}", patient.getPublicId())
+                .header(HttpHeaders.AUTHORIZATION, bearer(tutorToken)))
+            .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/patients/{patientPublicId}/events", patient.getPublicId())
+                .header(HttpHeaders.AUTHORIZATION, bearer(staffToken)))
+            .andExpect(status().isForbidden());
     }
 
     private MvcResult createEvent(String staffToken, Patient patient, String title, PatientEventType type) throws Exception {
@@ -229,6 +346,23 @@ class PatientEventIntegrationTests {
                 .content(objectMapper.writeValueAsString(new LinkRequestCreateRequest(patientCode))))
             .andExpect(status().isCreated())
             .andReturn();
+    }
+
+    private void approveLink(String tutorToken, String staffToken, String patientCode) throws Exception {
+        MvcResult requestResult = requestLink(tutorToken, patientCode);
+        Long linkId = objectMapper.readTree(requestResult.getResponse().getContentAsString()).at("/data/id").asLong();
+        mockMvc.perform(put("/api/linking/{id}/approve", linkId)
+                .with(csrf())
+                .header(HttpHeaders.AUTHORIZATION, bearer(staffToken)))
+            .andExpect(status().isOk());
+    }
+
+    private void cancelEvent(String staffToken, Long eventId) throws Exception {
+        mockMvc.perform(delete("/api/events/{id}", eventId)
+                .with(csrf())
+                .header(HttpHeaders.AUTHORIZATION, bearer(staffToken)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.status").value("CANCELLED"));
     }
 
     private String registerAndLoginTutor(String email) throws Exception {
